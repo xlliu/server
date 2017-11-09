@@ -3429,7 +3429,8 @@ void JOIN::exec_inner()
 
   if (zero_result_cause)
   {
-    if (select_lex->have_window_funcs() && send_row_on_empty_set())
+    if (select_lex->have_window_funcs() && send_row_on_empty_set() &&
+        cond_value != Item::COND_FALSE)
     {
       /*
         The query produces just one row but it has window functions.
@@ -21830,6 +21831,11 @@ JOIN_TAB::remove_duplicates()
   bool error;
   ulong keylength= 0;
   uint field_count;
+
+  /* Note: the object this-1 might not exist, in which case
+  the behavior is undefined (a crash is likely; also possible
+  vulnerability); it would be preferable to have a safer
+  way to "get previous item" */
   List<Item> *fields= (this-1)->fields;
   THD *thd= join->thd;
 
