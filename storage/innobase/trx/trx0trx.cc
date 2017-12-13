@@ -236,6 +236,7 @@ struct TrxFactory {
 
 		new(&trx->hit_list) hit_list_t();
 
+		trx->rw_trx_hash_pins = 0;
 		trx_init(trx);
 
 		DBUG_LOG("trx", "Init: " << trx);
@@ -446,6 +447,7 @@ trx_create_low()
 
 	/* We just got trx from pool, it should be non locking */
 	ut_ad(trx->will_lock == 0);
+	ut_ad(!trx->rw_trx_hash_pins);
 
 	/* Background trx should not be forced to rollback,
 	we will unset the flag for user trx. */
@@ -483,6 +485,7 @@ trx_free(trx_t*& trx)
 {
 	assert_trx_is_free(trx);
 
+	trx_sys->rw_trx_hash.put_pins(trx);
 	trx->mysql_thd = 0;
 	trx->mysql_log_file_name = 0;
 
@@ -731,7 +734,8 @@ trx_resurrect_table_locks(
 	trx_undo_rec_t*		undo_rec;
 	table_id_set		tables;
 
-	if (trx_state_eq(trx, TRX_STATE_COMMITTED_IN_MEMORY) || undo->empty) {
+	ut_ad(!trx_state_eq(trx, TRX_STATE_COMMITTED_IN_MEMORY));
+	if (undo->empty) {
 
 		return;
 	}
@@ -960,10 +964,37 @@ trx_resurrect_update(
 	}
 }
 
+static inline void trx_sys_add_trx_at_init(trx_t *trx, trx_undo_t *undo,
+                                           ib_uint64_t *rows_to_undo,
+                                           TrxIdSet *set)
+{
+  ut_ad(trx->id != 0);
+  ut_ad(trx->is_recovered);
+
+  set->insert(TrxTrack(trx->id, trx));
+  if (trx_state_eq(trx, TRX_STATE_ACTIVE) ||
+      trx_state_eq(trx, TRX_STATE_PREPARED))
+  {
+    trx_sys->rw_trx_hash.insert(trx);
+    trx_sys->rw_trx_hash.put_pins(trx);
+    trx_sys->rw_trx_ids.push_back(trx->id);
+    trx_resurrect_table_locks(trx, undo);
+    if (trx_state_eq(trx, TRX_STATE_ACTIVE))
+      *rows_to_undo += trx->undo_no;
+  }
+#ifdef UNIV_DEBUG
+  trx->in_rw_trx_list= true;
+  if (trx->id > trx_sys->rw_max_trx_id)
+    trx_sys->rw_max_trx_id= trx->id;
+#endif
+}
+
 /** Initialize (resurrect) transactions at startup. */
 void
 trx_lists_init_at_db_start()
 {
+	TrxIdSet set;
+	ib_uint64_t	rows_to_undo	= 0;
 	ut_a(srv_is_being_started);
 	ut_ad(!srv_was_started);
 	ut_ad(!purge_sys);
@@ -993,15 +1024,9 @@ trx_lists_init_at_db_start()
 		for (undo = UT_LIST_GET_FIRST(rseg->old_insert_list);
 		     undo != NULL;
 		     undo = UT_LIST_GET_NEXT(undo_list, undo)) {
-
-			trx_t*	trx;
-
-			trx = trx_resurrect_insert(undo, rseg);
+			trx_t*	trx = trx_resurrect_insert(undo, rseg);
 			trx->start_time = start_time;
-
-			trx_sys_rw_trx_add(trx);
-
-			trx_resurrect_table_locks(trx, undo);
+			trx_sys_add_trx_at_init(trx, undo, &rows_to_undo, &set);
 		}
 
 		/* Ressurrect other transactions. */
@@ -1009,12 +1034,9 @@ trx_lists_init_at_db_start()
 		     undo != NULL;
 		     undo = UT_LIST_GET_NEXT(undo_list, undo)) {
 
-			/* Check the trx_sys->rw_trx_set first. */
-			trx_sys_mutex_enter();
-
-			trx_t*	trx = trx_get_rw_trx_by_id(undo->trx_id);
-
-			trx_sys_mutex_exit();
+			/* Check if trx_id was already registered first. */
+			TrxIdSet::iterator it = set.find(TrxTrack(undo->trx_id));
+			trx_t *trx= (it == set.end() ? 0 : it->m_trx);
 
 			if (trx == NULL) {
 				trx = trx_allocate_for_background();
@@ -1025,34 +1047,35 @@ trx_lists_init_at_db_start()
 			}
 
 			trx_resurrect_update(trx, undo, rseg);
-
-			trx_sys_rw_trx_add(trx);
-
-			trx_resurrect_table_locks(trx, undo);
+			trx_sys_add_trx_at_init(trx, undo, &rows_to_undo, &set);
 		}
 	}
 
-	TrxIdSet::iterator	end = trx_sys->rw_trx_set.end();
+	if (set.size()) {
+		const char*	unit		= "";
 
-	for (TrxIdSet::iterator it = trx_sys->rw_trx_set.begin();
+		if (rows_to_undo > 1000000000) {
+			unit = "M";
+			rows_to_undo = rows_to_undo / 1000000;
+		}
+
+		ib::info() << set.size()
+			<< " transaction(s) which must be rolled back or"
+			" cleaned up in total " << rows_to_undo << unit
+			<< " row operations to undo";
+
+		ib::info() << "Trx id counter is " << trx_sys->max_trx_id;
+	}
+
+	TrxIdSet::iterator	end = set.end();
+
+	for (TrxIdSet::iterator it = set.begin();
 	     it != end;
 	     ++it) {
 
-		ut_ad(it->m_trx->in_rw_trx_list);
-#ifdef UNIV_DEBUG
-		if (it->m_trx->id > trx_sys->rw_max_trx_id) {
-			trx_sys->rw_max_trx_id = it->m_trx->id;
-		}
-#endif /* UNIV_DEBUG */
-
-		if (it->m_trx->state == TRX_STATE_ACTIVE
-		    || it->m_trx->state == TRX_STATE_PREPARED) {
-
-			trx_sys->rw_trx_ids.push_back(it->m_id);
-		}
-
 		UT_LIST_ADD_FIRST(trx_sys->rw_trx_list, it->m_trx);
 	}
+	std::sort(trx_sys->rw_trx_ids.begin(), trx_sys->rw_trx_ids.end());
 }
 
 /** Assign a persistent rollback segment in a round-robin fashion,
@@ -1171,8 +1194,8 @@ trx_t::assign_temp_rseg()
 		mutex_enter(&trx_sys->mutex);
 		id = trx_sys_get_new_trx_id();
 		trx_sys->rw_trx_ids.push_back(id);
-		trx_sys->rw_trx_set.insert(TrxTrack(id, this));
 		mutex_exit(&trx_sys->mutex);
+		trx_sys->rw_trx_hash.insert(this);
 	}
 
 	ut_ad(!rseg->is_persistent());
@@ -1237,10 +1260,14 @@ trx_start_low(
 
 	ut_ad(!trx->in_rw_trx_list);
 
-	/* We tend to over assert and that complicates the code somewhat.
-	e.g., the transaction state can be set earlier but we are forced to
-	set it under the protection of the trx_sys_t::mutex because some
-	trx list assertions are triggered unnecessarily. */
+	/* No other thread can access this trx object through rw_trx_hash, thus
+	we don't need trx_sys->mutex protection for that purpose. Still this trx
+	can be found through trx_sys->mysql_trx_list, which means state change
+	must be protected by e.g. trx->mutex.
+
+	For now we update it without mutex protection, because original code did
+	it this way. It has to be reviewed and fixed properly. */
+	trx->state = TRX_STATE_ACTIVE;
 
 	/* By default all transactions are in the read-only list unless they
 	are non-locking auto-commit read only transactions or background
@@ -1250,6 +1277,14 @@ trx_start_low(
 
 	if (!trx->read_only
 	    && (trx->mysql_thd == 0 || read_write || trx->ddl)) {
+		/* Only trx object owner thread or concurrent thread iterating
+		rw_trx_hash and holding trx->element->mutex is allowed to access
+		trx->in_rw_trx_list.
+
+		No extra protection is required if these conditions are met. We
+		just need to make sure it is updated when trx object is not in
+		rw_trx_hash. */
+		ut_d(trx->in_rw_trx_list = true);
 
 		trx->rsegs.m_redo.rseg = trx_assign_rseg_low();
 
@@ -1262,26 +1297,22 @@ trx_start_low(
 
 		trx_sys->rw_trx_ids.push_back(trx->id);
 
-		trx_sys_rw_trx_add(trx);
-
 		ut_ad(trx->rsegs.m_redo.rseg != 0
 		      || srv_read_only_mode
 		      || srv_force_recovery >= SRV_FORCE_NO_TRX_UNDO);
 
 		UT_LIST_ADD_FIRST(trx_sys->rw_trx_list, trx);
 
-		ut_d(trx->in_rw_trx_list = true);
 #ifdef UNIV_DEBUG
 		if (trx->id > trx_sys->rw_max_trx_id) {
 			trx_sys->rw_max_trx_id = trx->id;
 		}
 #endif /* UNIV_DEBUG */
 
-		trx->state = TRX_STATE_ACTIVE;
-
 		ut_ad(trx_sys_validate_trx_list());
 
 		trx_sys_mutex_exit();
+		trx_sys->rw_trx_hash.insert(trx);
 
 	} else {
 		trx->id = 0;
@@ -1302,17 +1333,11 @@ trx_start_low(
 
 				trx_sys->rw_trx_ids.push_back(trx->id);
 
-				trx_sys->rw_trx_set.insert(
-					TrxTrack(trx->id, trx));
-
 				trx_sys_mutex_exit();
+				trx_sys->rw_trx_hash.insert(trx);
 			}
-
-			trx->state = TRX_STATE_ACTIVE;
-
 		} else {
 			ut_ad(!read_write);
-			trx->state = TRX_STATE_ACTIVE;
 		}
 	}
 
@@ -1642,7 +1667,21 @@ trx_erase_lists(
 	bool	serialised)
 {
 	ut_ad(trx->id > 0);
-	trx_sys_mutex_enter();
+
+	if (trx->read_only || trx->rsegs.m_redo.rseg == NULL) {
+
+		ut_ad(!trx->in_rw_trx_list);
+		trx_sys_mutex_enter();
+	} else {
+
+		trx_sys_mutex_enter();
+		UT_LIST_REMOVE(trx_sys->rw_trx_list, trx);
+		ut_ad(trx_sys_validate_trx_list());
+
+		if (trx->read_view != NULL) {
+			trx_sys->mvcc->view_close(trx->read_view, true);
+		}
+	}
 
 	if (serialised) {
 		UT_LIST_REMOVE(trx_sys->serialisation_list, trx);
@@ -1654,24 +1693,9 @@ trx_erase_lists(
 		trx->id);
 	ut_ad(*it == trx->id);
 	trx_sys->rw_trx_ids.erase(it);
-
-	if (trx->read_only || trx->rsegs.m_redo.rseg == NULL) {
-
-		ut_ad(!trx->in_rw_trx_list);
-	} else {
-
-		UT_LIST_REMOVE(trx_sys->rw_trx_list, trx);
-		ut_d(trx->in_rw_trx_list = false);
-		ut_ad(trx_sys_validate_trx_list());
-
-		if (trx->read_view != NULL) {
-			trx_sys->mvcc->view_close(trx->read_view, true);
-		}
-	}
-
-	trx_sys->rw_trx_set.erase(TrxTrack(trx->id));
-
 	trx_sys_mutex_exit();
+	trx_sys->rw_trx_hash.erase(trx);
+	ut_d(trx->in_rw_trx_list = false);
 }
 
 /****************************************************************//**
@@ -3036,6 +3060,7 @@ trx_set_rw_mode(
 	ut_ad(!trx->in_rw_trx_list);
 	ut_ad(!trx_is_autocommit_non_locking(trx));
 	ut_ad(!trx->read_only);
+	ut_ad(trx->id == 0);
 
 	if (high_level_read_only) {
 		return;
@@ -3052,14 +3077,12 @@ trx_set_rw_mode(
 
 	ut_ad(trx->rsegs.m_redo.rseg != 0);
 
-	mutex_enter(&trx_sys->mutex);
+	ut_d(trx->in_rw_trx_list = true);
 
-	ut_ad(trx->id == 0);
+	mutex_enter(&trx_sys->mutex);
 	trx->id = trx_sys_get_new_trx_id();
 
 	trx_sys->rw_trx_ids.push_back(trx->id);
-
-	trx_sys->rw_trx_set.insert(TrxTrack(trx->id, trx));
 
 	/* So that we can see our own changes. */
 	if (MVCC::is_view_active(trx->read_view)) {
@@ -3074,9 +3097,8 @@ trx_set_rw_mode(
 
 	UT_LIST_ADD_FIRST(trx_sys->rw_trx_list, trx);
 
-	ut_d(trx->in_rw_trx_list = true);
-
 	mutex_exit(&trx_sys->mutex);
+	trx_sys->rw_trx_hash.insert(trx);
 }
 
 /**
