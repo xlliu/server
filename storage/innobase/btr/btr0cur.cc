@@ -88,17 +88,6 @@ enum btr_intention_t {
 #error "BTR_INTENTION_BOTH > BTR_INTENTION_INSERT"
 #endif
 
-/** For the index->lock scalability improvement, only possibility of clear
-performance regression observed was caused by grown huge history list length.
-That is because the exclusive use of index->lock also worked as reserving
-free blocks and read IO bandwidth with priority. To avoid huge glowing history
-list as same level with previous implementation, prioritizes pessimistic tree
-operations by purge as the previous, when it seems to be growing huge.
-
- Experimentally, the history list length starts to affect to performance
-throughput clearly from about 100000. */
-#define BTR_CUR_FINE_HISTORY_LENGTH	100000
-
 /** Number of searches down the B-tree in btr_cur_search_to_nth_level(). */
 ulint	btr_cur_n_non_sea;
 /** Old value of btr_cur_n_non_sea.  Copied by
@@ -960,23 +949,7 @@ btr_cur_search_to_nth_level(
 
 	switch (latch_mode) {
 	case BTR_MODIFY_TREE:
-		/* Most of delete-intended operations are purging.
-		Free blocks and read IO bandwidth should be prior
-		for them, when the history list is glowing huge. */
-		if (lock_intention == BTR_INTENTION_DELETE
-		    && trx_sys->rseg_history_len > BTR_CUR_FINE_HISTORY_LENGTH
-			&& buf_get_n_pending_read_ios()) {
-			mtr_x_lock(dict_index_get_lock(index), mtr);
-		} else if (dict_index_is_spatial(index)
-			   && lock_intention <= BTR_INTENTION_BOTH) {
-			/* X lock the if there is possibility of
-			pessimistic delete on spatial index. As we could
-			lock upward for the tree */
-
-			mtr_x_lock(dict_index_get_lock(index), mtr);
-		} else {
-			mtr_sx_lock(dict_index_get_lock(index), mtr);
-		}
+		mtr_x_lock(dict_index_get_lock(index), mtr);
 		upper_rw_latch = RW_X_LATCH;
 		break;
 	case BTR_CONT_MODIFY_TREE:
@@ -2087,16 +2060,7 @@ btr_cur_open_at_index_side_func(
 		upper_rw_latch = RW_NO_LATCH;
 		break;
 	case BTR_MODIFY_TREE:
-		/* Most of delete-intended operations are purging.
-		Free blocks and read IO bandwidth should be prior
-		for them, when the history list is glowing huge. */
-		if (lock_intention == BTR_INTENTION_DELETE
-		    && trx_sys->rseg_history_len > BTR_CUR_FINE_HISTORY_LENGTH
-		    && buf_get_n_pending_read_ios()) {
-			mtr_x_lock(dict_index_get_lock(index), mtr);
-		} else {
-			mtr_sx_lock(dict_index_get_lock(index), mtr);
-		}
+		mtr_x_lock(dict_index_get_lock(index), mtr);
 		upper_rw_latch = RW_X_LATCH;
 		break;
 	default:
@@ -2433,16 +2397,7 @@ btr_cur_open_at_rnd_pos_func(
 
 	switch (latch_mode) {
 	case BTR_MODIFY_TREE:
-		/* Most of delete-intended operations are purging.
-		Free blocks and read IO bandwidth should be prior
-		for them, when the history list is glowing huge. */
-		if (lock_intention == BTR_INTENTION_DELETE
-		    && trx_sys->rseg_history_len > BTR_CUR_FINE_HISTORY_LENGTH
-		    && buf_get_n_pending_read_ios()) {
-			mtr_x_lock(dict_index_get_lock(index), mtr);
-		} else {
-			mtr_sx_lock(dict_index_get_lock(index), mtr);
-		}
+		mtr_x_lock(dict_index_get_lock(index), mtr);
 		upper_rw_latch = RW_X_LATCH;
 		break;
 	case BTR_SEARCH_PREV:
