@@ -1538,7 +1538,7 @@ dict_create_index_step(
 				fts_index_cache_t*	index_cache;
 
 				rw_lock_x_lock(
-					&node->table->fts->cache->init_lock);
+					&node->table->fts->cache->lock);
 
 				index_cache = (fts_index_cache_t*)
 					 fts_find_index_cache(
@@ -1555,7 +1555,7 @@ dict_create_index_step(
 					*reinterpret_cast<void**>(index_cache));
 
 				rw_lock_x_unlock(
-					&node->table->fts->cache->init_lock);
+					&node->table->fts->cache->lock);
 			}
 
 			dict_index_remove_from_cache(node->table, node->index);

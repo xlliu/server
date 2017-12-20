@@ -296,7 +296,6 @@ void
 fts_cache_destroy(fts_cache_t* cache)
 {
 	rw_lock_free(&cache->lock);
-	rw_lock_free(&cache->init_lock);
 	mutex_free(&cache->optimize_lock);
 	mutex_free(&cache->deleted_lock);
 	mutex_free(&cache->doc_id_lock);
@@ -635,10 +634,6 @@ fts_cache_create(
 
 	rw_lock_create(fts_cache_rw_lock_key, &cache->lock, SYNC_FTS_CACHE);
 
-	rw_lock_create(
-		fts_cache_init_rw_lock_key, &cache->init_lock,
-		SYNC_FTS_CACHE_INIT);
-
 	mutex_create(LATCH_ID_FTS_DELETE, &cache->deleted_lock);
 
 	mutex_create(LATCH_ID_FTS_OPTIMIZE, &cache->optimize_lock);
@@ -689,7 +684,7 @@ fts_add_index(
 	ut_ad(fts);
 	cache = table->fts->cache;
 
-	rw_lock_x_lock(&cache->init_lock);
+	rw_lock_x_lock(&cache->lock);
 
 	ib_vector_push(fts->indexes, &index);
 
@@ -700,7 +695,7 @@ fts_add_index(
 		index_cache = fts_cache_index_cache_create(table, index);
 	}
 
-	rw_lock_x_unlock(&cache->init_lock);
+	rw_lock_x_unlock(&cache->lock);
 }
 
 /*******************************************************************//**
@@ -714,7 +709,7 @@ fts_reset_get_doc(
 	fts_get_doc_t*  get_doc;
 	ulint		i;
 
-	ut_ad(rw_lock_own(&cache->init_lock, RW_LOCK_X));
+	ut_ad(rw_lock_own(&cache->lock, RW_LOCK_X));
 
 	ib_vector_reset(cache->get_docs);
 
@@ -896,7 +891,7 @@ fts_drop_index(
 		fts_cache_t*            cache = table->fts->cache;
 		fts_index_cache_t*      index_cache;
 
-		rw_lock_x_lock(&cache->init_lock);
+		rw_lock_x_lock(&cache->lock);
 
 		index_cache = fts_find_index_cache(cache, index);
 
@@ -921,7 +916,7 @@ fts_drop_index(
 			fts_reset_get_doc(cache);
 		}
 
-		rw_lock_x_unlock(&cache->init_lock);
+		rw_lock_x_unlock(&cache->lock);
 	}
 
 	err = fts_drop_index_tables(trx, index);
@@ -1022,7 +1017,7 @@ fts_cache_index_cache_create(
 
 	ut_a(cache != NULL);
 
-	ut_ad(rw_lock_own(&cache->init_lock, RW_LOCK_X));
+	ut_ad(rw_lock_own(&cache->lock, RW_LOCK_X));
 
 	/* Must not already exist in the cache vector. */
 	ut_a(fts_find_index_cache(cache, index) == NULL);
@@ -1159,8 +1154,7 @@ fts_get_index_cache(
 {
 	ulint			i;
 
-	ut_ad(rw_lock_own((rw_lock_t*) &cache->lock, RW_LOCK_X)
-	      || rw_lock_own((rw_lock_t*) &cache->init_lock, RW_LOCK_X));
+	ut_ad(rw_lock_own(&cache->lock, RW_LOCK_X));
 
 	for (i = 0; i < ib_vector_size(cache->indexes); ++i) {
 		fts_index_cache_t*	index_cache;
@@ -1190,7 +1184,7 @@ fts_get_index_get_doc(
 {
 	ulint			i;
 
-	ut_ad(rw_lock_own((rw_lock_t*) &cache->init_lock, RW_LOCK_X));
+	ut_ad(rw_lock_own(&cache->lock, RW_LOCK_X));
 
 	for (i = 0; i < ib_vector_size(cache->get_docs); ++i) {
 		fts_get_doc_t*	get_doc;
@@ -3062,11 +3056,11 @@ fts_commit_table(
 	ftt->fts_trx->trx = trx;
 
 	if (cache->get_docs == NULL) {
-		rw_lock_x_lock(&cache->init_lock);
+		rw_lock_x_lock(&cache->lock);
 		if (cache->get_docs == NULL) {
 			cache->get_docs = fts_get_docs_create(cache);
 		}
-		rw_lock_x_unlock(&cache->init_lock);
+		rw_lock_x_unlock(&cache->lock);
 	}
 
 	for (node = rbt_first(rows);
@@ -4718,7 +4712,7 @@ fts_get_docs_create(
 {
 	ib_vector_t*	get_docs;
 
-	ut_ad(rw_lock_own(&cache->init_lock, RW_LOCK_X));
+	ut_ad(rw_lock_own(&cache->lock, RW_LOCK_X));
 
 	/* We need one instance of fts_get_doc_t per index. */
 	get_docs = ib_vector_create(cache->self_heap, sizeof(fts_get_doc_t), 4);
@@ -7458,11 +7452,10 @@ fts_init_index(
 		rw_lock_x_lock(&cache->lock);
 	}
 
-	rw_lock_x_lock(&cache->init_lock);
+	ut_ad(rw_lock_own(&cache->lock, RW_LOCK_X));
 	if (cache->get_docs == NULL) {
 		cache->get_docs = fts_get_docs_create(cache);
 	}
-	rw_lock_x_unlock(&cache->init_lock);
 
 	if (table->fts->fts_status & ADDED_TABLE_SYNCED) {
 		goto func_exit;

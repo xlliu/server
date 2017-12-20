@@ -3631,18 +3631,13 @@ row_drop_table_for_mysql(
 		if (table->fts) {
 			ut_ad(!table->fts->add_wq);
 			ut_ad(lock_trx_has_sys_table_locks(trx) == 0);
-
-			for (;;) {
-				bool retry = false;
-				if (dict_fts_index_syncing(table)) {
-					retry = true;
-				}
-				if (!retry) {
-					break;
-				}
-				DICT_BG_YIELD(trx);
-			}
 			row_mysql_unlock_data_dictionary(trx);
+			/* FIXME: remove the sleep, it is not
+			really fixing a race condition with fts_sync().
+			Instead, fix fts_optimize_remove_table(). */
+			while (dict_fts_index_syncing(table)) {
+				os_thread_sleep(250000);
+			}
 			fts_optimize_remove_table(table);
 			row_mysql_lock_data_dictionary(trx);
 		}

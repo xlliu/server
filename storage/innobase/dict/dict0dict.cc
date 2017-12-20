@@ -3296,10 +3296,10 @@ dict_index_build_internal_fts(
 		table->fts->cache = fts_cache_create(table);
 	}
 
-	rw_lock_x_lock(&table->fts->cache->init_lock);
+	rw_lock_x_lock(&table->fts->cache->lock);
 	/* Notify the FTS cache about this index. */
 	fts_cache_index_cache_create(table, new_index);
-	rw_lock_x_unlock(&table->fts->cache->init_lock);
+	rw_lock_x_unlock(&table->fts->cache->lock);
 
 	return(new_index);
 }
