@@ -424,13 +424,17 @@ ReadView::copy_trx_ids(const trx_ids_t& trx_ids)
 	}
 
 #ifdef UNIV_DEBUG
-	/* Assert that all transaction ids are in rw_trx_hash. If transaction
+	/* Assert that all transaction ids are active. If transaction
 	is in rw_trx_hash, it is guaranteed to be in ACTIVE or PREPARED state.
 	trx may have not been inserted to rw_trx_hash by this time, still it
 	is about to be inserted. Retry until it is there.*/
 	for (trx_ids_t::const_iterator it = trx_ids.begin();
 	     it != trx_ids.end(); ++it) {
-		while (!trx_sys.find_active(*it));
+		trx_t* trx;
+		while (!(trx = trx_sys.find_active(*it, true)));
+		ut_ad(trx->state == TRX_STATE_ACTIVE
+		      || trx->state == TRX_STATE_PREPARED);
+		trx->ref_count.dec();
 	}
 #endif /* UNIV_DEBUG */
 }
