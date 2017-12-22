@@ -1561,7 +1561,7 @@ lock_rec_other_trx_holds_expl(
 
 	lock_mutex_enter();
 
-	if (trx_t* impl_trx = trx_sys.rw_trx_hash.find(trx->id)) {
+	if (trx_t* impl_trx = trx_sys.find_active(trx->id)) {
 		ulint heap_no = page_rec_get_heap_no(rec);
 		trx_sys_mutex_enter();
 
@@ -6267,7 +6267,7 @@ lock_rec_queue_validate(
 		/* Unlike the non-debug code, this invariant can only succeed
 		if the check and assertion are covered by the lock mutex. */
 
-		const trx_t *impl_trx = trx_sys.rw_trx_hash.find(
+		const trx_t *impl_trx = trx_sys.find_active(
 			lock_clust_rec_some_has_impl(rec, index, offsets));
 
 		ut_ad(lock_mutex_own());
@@ -6851,7 +6851,7 @@ lock_rec_convert_impl_to_expl(
 
 		trx_id = lock_clust_rec_some_has_impl(rec, index, offsets);
 
-		trx = trx_sys.rw_trx_hash.find(trx_id, true);
+		trx = trx_sys.find_active(trx_id, true);
 	} else {
 		ut_ad(!dict_index_is_online_ddl(index));
 

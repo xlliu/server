@@ -545,7 +545,7 @@ public:
 
 
   /**
-    Finds trx object in lock-free hash with given id.
+    Find trx object in lock-free hash with given id.
 
     With do_ref_count == false the transaction may get committed before this
     method returns. If the caller wants to dereference returned trx pointer it
@@ -781,6 +781,19 @@ struct trx_sys_t {
 
 	/** Close the transaction system on shutdown */
 	void close();
+
+	/** Find an active trx object */
+	trx_t *find_active(trx_t* caller_trx, trx_id_t trx_id,
+			   bool do_ref_count= false)
+	{
+		return rw_trx_hash.find(caller_trx, trx_id, do_ref_count);
+	}
+
+	/** Find an active trx object */
+	trx_t *find_active(trx_id_t trx_id, bool do_ref_count= false)
+	{
+		return rw_trx_hash.find(trx_id, do_ref_count);
+	}
 
 	/** @return total number of active (non-prepared) transactions */
 	ulint any_active_transactions();

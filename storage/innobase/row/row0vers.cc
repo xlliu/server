@@ -118,7 +118,7 @@ row_vers_impl_x_locked_low(
 		DBUG_RETURN(0);
 	}
 
-	trx_t*	trx = trx_sys.rw_trx_hash.find(trx_id, true);
+	trx_t*	trx = trx_sys.find_active(trx_id, true);
 
 	if (trx == 0) {
 		/* The transaction that modified or inserted clust_rec is no
@@ -188,9 +188,8 @@ row_vers_impl_x_locked_low(
 		/* The oldest visible clustered index version must not be
 		delete-marked, because we never start a transaction by
 		inserting a delete-marked record. */
-		ut_ad(prev_version
-		      || !rec_get_deleted_flag(version, comp)
-		      || !trx_sys.rw_trx_hash.find(trx_id));
+		ut_ad(prev_version || !trx
+		      || !rec_get_deleted_flag(version, comp));
 
 		/* Free version and clust_offsets. */
 		mem_heap_free(old_heap);
@@ -1271,7 +1270,6 @@ row_vers_build_for_semi_consistent_read(
 	ut_ad(!vrow || !(*vrow));
 
 	for (;;) {
-		const trx_t*	version_trx;
 		mem_heap_t*	heap2;
 		rec_t*		prev_version;
 		trx_id_t	version_trx_id;
@@ -1281,12 +1279,7 @@ row_vers_build_for_semi_consistent_read(
 			rec_trx_id = version_trx_id;
 		}
 
-		if (!version_trx_id) {
-			goto committed_version_trx;
-		}
-
-		version_trx = trx_sys.rw_trx_hash.find(version_trx_id);
-		if (!version_trx) {
+		if (!trx_sys.find_active(version_trx_id)) {
 committed_version_trx:
 			/* We found a version that belongs to a
 			committed transaction: return it. */

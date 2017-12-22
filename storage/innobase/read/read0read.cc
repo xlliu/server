@@ -430,7 +430,7 @@ ReadView::copy_trx_ids(const trx_ids_t& trx_ids)
 	is about to be inserted. Retry until it is there.*/
 	for (trx_ids_t::const_iterator it = trx_ids.begin();
 	     it != trx_ids.end(); ++it) {
-		while (!trx_sys.rw_trx_hash.find(*it));
+		while (!trx_sys.find_active(*it));
 	}
 #endif /* UNIV_DEBUG */
 }
