@@ -197,7 +197,7 @@ dberr_t
 trx_rollback_low(
 	trx_t*	trx)
 {
-	/* We are reading trx->state without holding trx_sys->mutex
+	/* We are reading trx->state without holding trx_sys.mutex
 	here, because the rollback should be invoked for a running
 	active MySQL transaction (or recovered prepared transaction)
 	that is associated with the current thread. */
@@ -305,7 +305,7 @@ trx_rollback_last_sql_stat_for_mysql(
 {
 	dberr_t	err;
 
-	/* We are reading trx->state without holding trx_sys->mutex
+	/* We are reading trx->state without holding trx_sys.mutex
 	here, because the statement rollback should be invoked for a
 	running active MySQL transaction that is associated with the
 	current thread. */
@@ -485,7 +485,7 @@ trx_rollback_to_savepoint_for_mysql(
 {
 	trx_named_savept_t*	savep;
 
-	/* We are reading trx->state without holding trx_sys->mutex
+	/* We are reading trx->state without holding trx_sys.mutex
 	here, because the savepoint rollback should be invoked for a
 	running active MySQL transaction that is associated with the
 	current thread. */
@@ -727,7 +727,7 @@ Rollback or clean up any resurrected incomplete transactions. It assumes
 that the caller holds the trx_sys_t::mutex and it will release the
 lock if it does a clean up or rollback.
 @return TRUE if the transaction was cleaned up or rolled back
-and trx_sys->mutex was released. */
+and trx_sys.mutex was released. */
 static
 ibool
 trx_rollback_resurrected(
@@ -764,22 +764,22 @@ func_exit:
 		    && !srv_undo_sources && srv_fast_shutdown) {
 fake_prepared:
 			trx->state = TRX_STATE_PREPARED;
-			trx_sys->n_prepared_trx++;
-			trx_sys->n_prepared_recovered_trx++;
+			trx_sys.n_prepared_trx++;
+			trx_sys.n_prepared_recovered_trx++;
 			*all = FALSE;
 			goto func_exit;
 		}
 		trx_mutex_exit(trx);
 
 		if (*all || trx_get_dict_operation(trx) != TRX_DICT_OP_NONE) {
-			trx_sys_mutex_exit();
+			trx_sys.mutex.exit();
 			trx_rollback_active(trx);
 			if (trx->error_state != DB_SUCCESS) {
 				ut_ad(trx->error_state == DB_INTERRUPTED);
 				trx->error_state = DB_SUCCESS;
 				ut_ad(!srv_undo_sources);
 				ut_ad(srv_fast_shutdown);
-				mutex_enter(&trx_sys->mutex);
+				trx_sys_mutex_enter();
 				trx_mutex_enter(trx);
 				goto fake_prepared;
 			}
@@ -815,12 +815,12 @@ trx_roll_must_shutdown()
 	}
 
 	ib_time_t time = ut_time();
-	mutex_enter(&trx_sys->mutex);
+	trx_sys_mutex_enter();
 	mutex_enter(&recv_sys->mutex);
 
 	if (recv_sys->report(time)) {
 		ulint n_trx = 0, n_rows = 0;
-		for (const trx_t* t = UT_LIST_GET_FIRST(trx_sys->rw_trx_list);
+		for (const trx_t* t = UT_LIST_GET_FIRST(trx_sys.rw_trx_list);
 		     t != NULL;
 		     t = UT_LIST_GET_NEXT(trx_list, t)) {
 
@@ -838,7 +838,7 @@ trx_roll_must_shutdown()
 	}
 
 	mutex_exit(&recv_sys->mutex);
-	mutex_exit(&trx_sys->mutex);
+	trx_sys_mutex_exit();
 	return false;
 }
 
@@ -878,14 +878,14 @@ trx_rollback_or_clean_recovered(
 	do {
 		trx_sys_mutex_enter();
 
-		for (trx = UT_LIST_GET_FIRST(trx_sys->rw_trx_list);
+		for (trx = UT_LIST_GET_FIRST(trx_sys.rw_trx_list);
 		     trx != NULL;
 		     trx = UT_LIST_GET_NEXT(trx_list, trx)) {
 
 			assert_trx_in_rw_list(trx);
 
 			/* If this function does a cleanup or rollback
-			then it will release the trx_sys->mutex, therefore
+			then it will release the trx_sys.mutex, therefore
 			we need to reacquire it before retrying the loop. */
 
 			if (trx_rollback_resurrected(trx, &all)) {

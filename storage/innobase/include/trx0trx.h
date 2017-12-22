@@ -349,7 +349,7 @@ trx_commit_step(
 
 /**********************************************************************//**
 Prints info about a transaction.
-Caller must hold trx_sys->mutex. */
+Caller must hold trx_sys.mutex. */
 void
 trx_print_low(
 /*==========*/
@@ -369,7 +369,7 @@ trx_print_low(
 
 /**********************************************************************//**
 Prints info about a transaction.
-The caller must hold lock_sys->mutex and trx_sys->mutex.
+The caller must hold lock_sys->mutex and trx_sys.mutex.
 When possible, use trx_print() instead. */
 void
 trx_print_latched(
@@ -382,7 +382,7 @@ trx_print_latched(
 #ifdef WITH_WSREP
 /**********************************************************************//**
 Prints info about a transaction.
-Transaction information may be retrieved without having trx_sys->mutex acquired
+Transaction information may be retrieved without having trx_sys.mutex acquired
 so it may not be completely accurate. The caller must own lock_sys->mutex
 and the trx must have some locks to make sure that it does not escape
 without locking lock_sys->mutex. */
@@ -397,7 +397,7 @@ wsrep_trx_print_locking(
 #endif /* WITH_WSREP */
 /**********************************************************************//**
 Prints info about a transaction.
-Acquires and releases lock_sys->mutex and trx_sys->mutex. */
+Acquires and releases lock_sys->mutex and trx_sys.mutex. */
 void
 trx_print(
 /*======*/
@@ -427,9 +427,9 @@ trx_set_dict_operation(
 
 /**********************************************************************//**
 Determines if a transaction is in the given state.
-The caller must hold trx_sys->mutex, or it must be the thread
+The caller must hold trx_sys.mutex, or it must be the thread
 that is serving a running transaction.
-A running RW transaction must be in trx_sys->rw_trx_list.
+A running RW transaction must be in trx_sys.rw_trx_list.
 @return TRUE if trx->state == state */
 UNIV_INLINE
 bool
@@ -448,7 +448,7 @@ trx_state_eq(
 # ifdef UNIV_DEBUG
 /**********************************************************************//**
 Asserts that a transaction has been started.
-The caller must hold trx_sys->mutex.
+The caller must hold trx_sys.mutex.
 @return TRUE if started */
 ibool
 trx_assert_started(
@@ -798,15 +798,15 @@ so without holding any mutex. The following are exceptions to this:
 
 * trx_rollback_resurrected() may access resurrected (connectionless)
 transactions while the system is already processing new user
-transactions. The trx_sys->mutex prevents a race condition between it
+transactions. The trx_sys.mutex prevents a race condition between it
 and lock_trx_release_locks() [invoked by trx_commit()].
 
 * trx_print_low() may access transactions not associated with the current
-thread. The caller must be holding trx_sys->mutex and lock_sys->mutex.
+thread. The caller must be holding trx_sys.mutex and lock_sys->mutex.
 
-* When a transaction handle is in the trx_sys->mysql_trx_list or
-trx_sys->trx_list, some of its fields must not be modified without
-holding trx_sys->mutex exclusively.
+* When a transaction handle is in the trx_sys.mysql_trx_list or
+trx_sys.trx_list, some of its fields must not be modified without
+holding trx_sys.mutex exclusively.
 
 * The locking code (in particular, lock_deadlock_recursive() and
 lock_rec_convert_impl_to_expl()) will access transactions associated
@@ -971,7 +971,7 @@ struct trx_t {
 	XA (2PC) transactions are always treated as non-autocommit.
 
 	Transitions to ACTIVE or NOT_STARTED occur when
-	!in_rw_trx_list (no trx_sys->mutex needed).
+	!in_rw_trx_list (no trx_sys.mutex needed).
 
 	Autocommit non-locking read-only transactions move between states
 	without holding any mutex. They are !in_rw_trx_list.
@@ -987,7 +987,7 @@ struct trx_t {
 	it is a user transaction. It cannot be in rw_trx_list.
 
 	ACTIVE->PREPARED->COMMITTED is only possible when trx->in_rw_trx_list.
-	The transition ACTIVE->PREPARED is protected by trx_sys->mutex.
+	The transition ACTIVE->PREPARED is protected by trx_sys.mutex.
 
 	ACTIVE->COMMITTED is possible when the transaction is in
 	rw_trx_list.
@@ -1006,7 +1006,7 @@ struct trx_t {
 
 	UT_LIST_NODE_T(trx_t)
 			trx_list;	/*!< list of transactions;
-					protected by trx_sys->mutex. */
+					protected by trx_sys.mutex. */
 	UT_LIST_NODE_T(trx_t)
 			no_list;	/*!< Required during view creation
 					to check for the view limit for
@@ -1018,7 +1018,7 @@ struct trx_t {
 					or both */
 	bool		is_recovered;	/*!< 0=normal transaction,
 					1=recovered, must be rolled back,
-					protected by trx_sys->mutex when
+					protected by trx_sys.mutex when
 					trx->in_rw_trx_list holds */
 
 	hit_list_t	hit_list;	/*!< List of transactions to kill,
@@ -1132,19 +1132,19 @@ struct trx_t {
 	/** The following two fields are mutually exclusive. */
 	/* @{ */
 
-	bool		in_rw_trx_list;	/*!< true if in trx_sys->rw_trx_list */
+	bool		in_rw_trx_list;	/*!< true if in trx_sys.rw_trx_list */
 	/* @} */
 #endif /* UNIV_DEBUG */
 	UT_LIST_NODE_T(trx_t)
 			mysql_trx_list;	/*!< list of transactions created for
-					MySQL; protected by trx_sys->mutex */
+					MySQL; protected by trx_sys.mutex */
 #ifdef UNIV_DEBUG
 	/** whether this transaction is updating persistent statistics
 	(used for silencing a debug assertion at shutdown) */
 	bool		persistent_stats;
 	bool		in_mysql_trx_list;
 					/*!< true if in
-					trx_sys->mysql_trx_list */
+					trx_sys.mysql_trx_list */
 #endif /* UNIV_DEBUG */
 	/*------------------------------*/
 	dberr_t		error_state;	/*!< 0 if no error, otherwise error

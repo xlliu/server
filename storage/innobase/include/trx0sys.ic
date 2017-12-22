@@ -197,7 +197,7 @@ Returns the minimum trx id in trx list. This is the smallest id for which
 the trx can possibly be active. (But, you must look at the trx->state
 to find out if the minimum trx id transaction itself is active, or already
 committed.). The caller must be holding the trx_sys_t::mutex in shared mode.
-@return the minimum trx id, or trx_sys->max_trx_id if the trx list is empty */
+@return the minimum trx id, or trx_sys.max_trx_id if the trx list is empty */
 UNIV_INLINE
 trx_id_t
 trx_rw_min_trx_id_low(void)
@@ -207,10 +207,10 @@ trx_rw_min_trx_id_low(void)
 
 	ut_ad(trx_sys_mutex_own());
 
-	const trx_t*	trx = UT_LIST_GET_LAST(trx_sys->rw_trx_list);
+	const trx_t*	trx = UT_LIST_GET_LAST(trx_sys.rw_trx_list);
 
 	if (trx == NULL) {
-		id = trx_sys->max_trx_id;
+		id = trx_sys.max_trx_id;
 	} else {
 		assert_trx_in_rw_list(trx);
 		id = trx->id;
@@ -224,7 +224,7 @@ Returns the minimum trx id in rw trx list. This is the smallest id for which
 the rw trx can possibly be active. (But, you must look at the trx->state
 to find out if the minimum trx id transaction itself is active, or already
 committed.)
-@return the minimum trx id, or trx_sys->max_trx_id if rw trx list is empty */
+@return the minimum trx id, or trx_sys.max_trx_id if rw trx list is empty */
 UNIV_INLINE
 trx_id_t
 trx_rw_min_trx_id(void)
@@ -259,12 +259,12 @@ trx_sys_get_new_trx_id()
 	Thus trx id values will not overlap when the database is
 	repeatedly started! */
 
-	if (!(trx_sys->max_trx_id % TRX_SYS_TRX_ID_WRITE_MARGIN)) {
+	if (!(trx_sys.max_trx_id % TRX_SYS_TRX_ID_WRITE_MARGIN)) {
 
 		trx_sys_flush_max_trx_id();
 	}
 
-	return(trx_sys->max_trx_id++);
+	return(trx_sys.max_trx_id++);
 }
 
 /*****************************************************************//**
@@ -283,7 +283,7 @@ trx_sys_get_max_trx_id(void)
 
 	trx_sys_mutex_enter();
 
-	trx_id_t	max_trx_id = trx_sys->max_trx_id;
+	trx_id_t	max_trx_id = trx_sys.max_trx_id;
 
 	trx_sys_mutex_exit();
 
@@ -292,7 +292,7 @@ trx_sys_get_max_trx_id(void)
 	/* Perform a dirty read. Callers should be prepared for stale
 	values, and we know that the value fits in a machine word, so
 	that it will be read and written atomically. */
-	return(trx_sys->max_trx_id);
+	return(trx_sys.max_trx_id);
 #endif /* UNIV_WORD_SIZE < DATA_TRX_ID_LEN */
 }
 
@@ -308,7 +308,7 @@ trx_sys_get_n_rw_trx(void)
 
 	trx_sys_mutex_enter();
 
-	n_trx = UT_LIST_GET_LEN(trx_sys->rw_trx_list);
+	n_trx = UT_LIST_GET_LEN(trx_sys.rw_trx_list);
 
 	trx_sys_mutex_exit();
 

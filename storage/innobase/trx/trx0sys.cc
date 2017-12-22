@@ -48,7 +48,7 @@ Created 3/26/1996 Heikki Tuuri
 #include <mysql/service_wsrep.h>
 
 /** The transaction system */
-trx_sys_t*		trx_sys;
+trx_sys_t		trx_sys;
 
 /** Check whether transaction id is valid.
 @param[in]	id              transaction id to check
@@ -58,7 +58,7 @@ ReadView::check_trx_id_sanity(
 	trx_id_t		id,
 	const table_name_t&	name)
 {
-	if (id >= trx_sys->max_trx_id) {
+	if (id >= trx_sys.max_trx_id) {
 
 		ib::warn() << "A transaction id"
 			   << " in a record of table "
@@ -112,7 +112,7 @@ trx_sys_flush_max_trx_id(void)
 
 		mlog_write_ull(
 			sys_header + TRX_SYS_TRX_ID_STORE,
-			trx_sys->max_trx_id, &mtr);
+			trx_sys.max_trx_id, &mtr);
 
 		mtr_commit(&mtr);
 	}
@@ -444,41 +444,35 @@ trx_sys_init_at_db_start()
 
 	sys_header = trx_sysf_get(&mtr);
 
-	trx_sys->max_trx_id = 2 * TRX_SYS_TRX_ID_WRITE_MARGIN
+	trx_sys.max_trx_id = 2 * TRX_SYS_TRX_ID_WRITE_MARGIN
 		+ ut_uint64_align_up(mach_read_from_8(sys_header
 						   + TRX_SYS_TRX_ID_STORE),
 				     TRX_SYS_TRX_ID_WRITE_MARGIN);
 
 	mtr.commit();
-	ut_d(trx_sys->rw_max_trx_id = trx_sys->max_trx_id);
+	ut_d(trx_sys.rw_max_trx_id = trx_sys.max_trx_id);
 
 	trx_dummy_sess = sess_open();
 
 	trx_lists_init_at_db_start();
-	trx_sys->mvcc->clone_oldest_view(&purge_sys->view);
+	trx_sys.mvcc->clone_oldest_view(&purge_sys->view);
 }
 
-/*****************************************************************//**
-Creates the trx_sys instance and initializes purge_queue and mutex. */
+/** Create the instance */
 void
-trx_sys_create(void)
-/*================*/
+trx_sys_t::create()
 {
-	ut_ad(trx_sys == NULL);
+	ut_ad(this == &trx_sys);
+	ut_ad(!mvcc);
+	mutex_create(LATCH_ID_TRX_SYS, &mutex);
 
-	trx_sys = static_cast<trx_sys_t*>(ut_zalloc_nokey(sizeof(*trx_sys)));
+	UT_LIST_INIT(serialisation_list, &trx_t::no_list);
+	UT_LIST_INIT(rw_trx_list, &trx_t::trx_list);
+	UT_LIST_INIT(mysql_trx_list, &trx_t::mysql_trx_list);
 
-	mutex_create(LATCH_ID_TRX_SYS, &trx_sys->mutex);
+	mvcc = UT_NEW_NOKEY(MVCC(1024));
 
-	UT_LIST_INIT(trx_sys->serialisation_list, &trx_t::no_list);
-	UT_LIST_INIT(trx_sys->rw_trx_list, &trx_t::trx_list);
-	UT_LIST_INIT(trx_sys->mysql_trx_list, &trx_t::mysql_trx_list);
-
-	trx_sys->mvcc = UT_NEW_NOKEY(MVCC(1024));
-
-	new(&trx_sys->rw_trx_ids) trx_ids_t(ut_allocator<trx_id_t>(
-			mem_key_trx_sys_t_rw_trx_ids));
-	trx_sys->rw_trx_hash.init();
+	rw_trx_hash.init();
 }
 
 /*****************************************************************//**
@@ -574,16 +568,17 @@ trx_sys_create_rsegs()
 	return(true);
 }
 
-/*********************************************************************
-Shutdown/Close the transaction system. */
+/** Close the transaction system on shutdown */
 void
-trx_sys_close(void)
-/*===============*/
+trx_sys_t::close()
 {
-	ut_ad(trx_sys != NULL);
+	ut_ad(this == &trx_sys);
 	ut_ad(srv_shutdown_state == SRV_SHUTDOWN_EXIT_THREADS);
+	if (!mvcc) {
+		return;
+	}
 
-	if (ulint size = trx_sys->mvcc->size()) {
+	if (ulint size = mvcc->size()) {
 		ib::error() << "All read views were not closed before"
 			" shutdown: " << size << " read views open";
 	}
@@ -594,71 +589,62 @@ trx_sys_close(void)
 	}
 
 	/* Only prepared transactions may be left in the system. Free them. */
-	ut_a(UT_LIST_GET_LEN(trx_sys->rw_trx_list) == trx_sys->n_prepared_trx
+	ut_a(UT_LIST_GET_LEN(rw_trx_list) == n_prepared_trx
 	     || !srv_was_started
 	     || srv_read_only_mode
 	     || srv_force_recovery >= SRV_FORCE_NO_TRX_UNDO);
 
-	for (trx_t* trx = UT_LIST_GET_FIRST(trx_sys->rw_trx_list);
+	for (trx_t* trx = UT_LIST_GET_FIRST(rw_trx_list);
 	     trx != NULL;
-	     trx = UT_LIST_GET_FIRST(trx_sys->rw_trx_list)) {
+	     trx = UT_LIST_GET_FIRST(rw_trx_list)) {
 
 		trx_free_prepared(trx);
 
-		UT_LIST_REMOVE(trx_sys->rw_trx_list, trx);
+		UT_LIST_REMOVE(rw_trx_list, trx);
 	}
 
 	/* There can't be any active transactions. */
 
 	for (ulint i = 0; i < TRX_SYS_N_RSEGS; ++i) {
-		if (trx_rseg_t* rseg = trx_sys->rseg_array[i]) {
+		if (trx_rseg_t* rseg = rseg_array[i]) {
 			trx_rseg_mem_free(rseg);
 		}
 
-		if (trx_rseg_t* rseg = trx_sys->temp_rsegs[i]) {
+		if (trx_rseg_t* rseg = temp_rsegs[i]) {
 			trx_rseg_mem_free(rseg);
 		}
 	}
 
-	UT_DELETE(trx_sys->mvcc);
+	UT_DELETE(mvcc);
+	mvcc = NULL;
 
-	ut_a(UT_LIST_GET_LEN(trx_sys->rw_trx_list) == 0);
-	ut_a(UT_LIST_GET_LEN(trx_sys->mysql_trx_list) == 0);
-	ut_a(UT_LIST_GET_LEN(trx_sys->serialisation_list) == 0);
+	ut_a(UT_LIST_GET_LEN(rw_trx_list) == 0);
+	ut_a(UT_LIST_GET_LEN(mysql_trx_list) == 0);
+	ut_a(UT_LIST_GET_LEN(serialisation_list) == 0);
 
-	/* We used placement new to create this mutex. Call the destructor. */
-	mutex_free(&trx_sys->mutex);
+	mutex_free(&mutex);
 
-	trx_sys->rw_trx_ids.~trx_ids_t();
-
-	trx_sys->rw_trx_hash.destroy();
-	ut_free(trx_sys);
-
-	trx_sys = NULL;
+	rw_trx_hash.destroy();
 }
 
-/*********************************************************************
-Check if there are any active (non-prepared) transactions.
-This is only used to check if it's safe to shutdown.
-@return total number of active transactions or 0 if none */
-ulint
-trx_sys_any_active_transactions(void)
-/*=================================*/
+/** @return total number of active (non-prepared) transactions */
+ulint trx_sys_t::any_active_transactions()
 {
+	ut_ad(this == &trx_sys);
 	ulint	total_trx = 0;
 
 	trx_sys_mutex_enter();
 
-	total_trx = UT_LIST_GET_LEN(trx_sys->rw_trx_list);
+	total_trx = UT_LIST_GET_LEN(rw_trx_list);
 
-	for (trx_t* trx = UT_LIST_GET_FIRST(trx_sys->mysql_trx_list);
+	for (trx_t* trx = UT_LIST_GET_FIRST(mysql_trx_list);
 	     trx != NULL;
 	     trx = UT_LIST_GET_NEXT(mysql_trx_list, trx)) {
 		total_trx += trx->state != TRX_STATE_NOT_STARTED;
 	}
 
-	ut_a(total_trx >= trx_sys->n_prepared_trx);
-	total_trx -= trx_sys->n_prepared_trx;
+	ut_a(total_trx >= n_prepared_trx);
+	total_trx -= n_prepared_trx;
 
 	trx_sys_mutex_exit();
 
@@ -667,42 +653,22 @@ trx_sys_any_active_transactions(void)
 
 #ifdef UNIV_DEBUG
 /*************************************************************//**
-Validate the trx_ut_list_t.
-@return true if valid. */
-static
+Validate the trx_sys_t::rw_trx_list.
+@return true if the list is valid. */
 bool
-trx_sys_validate_trx_list_low(
-/*===========================*/
-	trx_ut_list_t*	trx_list)	/*!< in: &trx_sys->rw_trx_list */
+trx_sys_validate_trx_list()
 {
-	const trx_t*	trx;
 	const trx_t*	prev_trx = NULL;
 
 	ut_ad(trx_sys_mutex_own());
 
-	ut_ad(trx_list == &trx_sys->rw_trx_list);
-
-	for (trx = UT_LIST_GET_FIRST(*trx_list);
+	for (const trx_t* trx = UT_LIST_GET_FIRST(trx_sys.rw_trx_list);
 	     trx != NULL;
 	     prev_trx = trx, trx = UT_LIST_GET_NEXT(trx_list, prev_trx)) {
 
 		check_trx_state(trx);
 		ut_a(prev_trx == NULL || prev_trx->id > trx->id);
 	}
-
-	return(true);
-}
-
-/*************************************************************//**
-Validate the trx_sys_t::rw_trx_list.
-@return true if the list is valid. */
-bool
-trx_sys_validate_trx_list()
-/*=======================*/
-{
-	ut_ad(trx_sys_mutex_own());
-
-	ut_a(trx_sys_validate_trx_list_low(&trx_sys->rw_trx_list));
 
 	return(true);
 }

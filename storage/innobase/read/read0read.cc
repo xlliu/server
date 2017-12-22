@@ -162,8 +162,8 @@ For details see: row_vers_old_has_index_entry() and row_purge_poss_sec()
 
 Some additional issues:
 
-What if trx_sys->view_list == NULL and some transaction T1 and Purge both
-try to open read_view at same time. Only one can acquire trx_sys->mutex.
+What if trx_sys.view_list == NULL and some transaction T1 and Purge both
+try to open read_view at same time. Only one can acquire trx_sys.mutex.
 In which order will the views be opened? Should it matter? If no, why?
 
 The order does not matter. No new transactions can be created and no running
@@ -200,7 +200,7 @@ MVCC::validate() const
 {
 	ViewCheck	check;
 
-	ut_ad(mutex_own(&trx_sys->mutex));
+	ut_ad(trx_sys_mutex_own());
 
 	ut_list_map(m_views, check);
 
@@ -430,7 +430,7 @@ ReadView::copy_trx_ids(const trx_ids_t& trx_ids)
 	is about to be inserted. Retry until it is there.*/
 	for (trx_ids_t::const_iterator it = trx_ids.begin();
 	     it != trx_ids.end(); ++it) {
-		while (!trx_sys->rw_trx_hash.find(*it));
+		while (!trx_sys.rw_trx_hash.find(*it));
 	}
 #endif /* UNIV_DEBUG */
 }
@@ -443,22 +443,22 @@ point in time are seen in the view.
 void
 ReadView::prepare(trx_id_t id)
 {
-	ut_ad(mutex_own(&trx_sys->mutex));
+	ut_ad(trx_sys_mutex_own());
 
 	m_creator_trx_id = id;
 
-	m_low_limit_no = m_low_limit_id = trx_sys->max_trx_id;
+	m_low_limit_no = m_low_limit_id = trx_sys.max_trx_id;
 
-	if (!trx_sys->rw_trx_ids.empty()) {
-		copy_trx_ids(trx_sys->rw_trx_ids);
+	if (!trx_sys.rw_trx_ids.empty()) {
+		copy_trx_ids(trx_sys.rw_trx_ids);
 	} else {
 		m_ids.clear();
 	}
 
-	if (UT_LIST_GET_LEN(trx_sys->serialisation_list) > 0) {
+	if (UT_LIST_GET_LEN(trx_sys.serialisation_list) > 0) {
 		const trx_t*	trx;
 
-		trx = UT_LIST_GET_FIRST(trx_sys->serialisation_list);
+		trx = UT_LIST_GET_FIRST(trx_sys.serialisation_list);
 
 		if (trx->no < m_low_limit_no) {
 			m_low_limit_no = trx->no;
@@ -488,7 +488,7 @@ a new view.
 ReadView*
 MVCC::get_view()
 {
-	ut_ad(mutex_own(&trx_sys->mutex));
+	ut_ad(trx_sys_mutex_own());
 
 	ReadView*	view;
 
@@ -525,7 +525,7 @@ MVCC::view_release(ReadView*& view)
 	ut_ad(view->m_closed);
 
 	/** RW transactions should not free their views here. Their views
-	should freed using view_close_view() */
+	should freed using view_close() */
 
 	ut_ad(view->m_creator_trx_id == 0);
 
@@ -575,12 +575,12 @@ MVCC::view_open(ReadView*& view, trx_t* trx)
 			}
 		}
 
-		mutex_enter(&trx_sys->mutex);
+		trx_sys_mutex_enter();
 
 		UT_LIST_REMOVE(m_views, view);
 
 	} else {
-		mutex_enter(&trx_sys->mutex);
+		trx_sys_mutex_enter();
 
 		view = get_view();
 	}
@@ -610,7 +610,7 @@ MVCC::get_oldest_view() const
 {
 	ReadView*	view;
 
-	ut_ad(mutex_own(&trx_sys->mutex));
+	ut_ad(trx_sys_mutex_own());
 
 	for (view = UT_LIST_GET_LAST(m_views);
 	     view != NULL;
@@ -683,23 +683,17 @@ purge the delete marked record or not.
 void
 MVCC::clone_oldest_view(ReadView* view)
 {
-	mutex_enter(&trx_sys->mutex);
+	trx_sys_mutex_enter();
 
 	ReadView*	oldest_view = get_oldest_view();
 
 	if (oldest_view == NULL) {
-
 		view->prepare(0);
-
 		trx_sys_mutex_exit();
-
 		view->complete();
-
 	} else {
 		view->copy_prepare(*oldest_view);
-
 		trx_sys_mutex_exit();
-
 		view->copy_complete();
 	}
 }
@@ -774,7 +768,6 @@ void
 MVCC::set_view_creator_trx_id(ReadView* view, trx_id_t id)
 {
 	ut_ad(id > 0);
-	ut_ad(mutex_own(&trx_sys->mutex));
-
+	ut_ad(trx_sys_mutex_own());
 	view->creator_trx_id(id);
 }

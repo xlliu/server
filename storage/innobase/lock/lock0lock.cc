@@ -1561,11 +1561,11 @@ lock_rec_other_trx_holds_expl(
 
 	lock_mutex_enter();
 
-	if (trx_t* impl_trx = trx_sys->rw_trx_hash.find(trx->id)) {
+	if (trx_t* impl_trx = trx_sys.rw_trx_hash.find(trx->id)) {
 		ulint heap_no = page_rec_get_heap_no(rec);
-		mutex_enter(&trx_sys->mutex);
+		trx_sys_mutex_enter();
 
-		for (trx_t* t = UT_LIST_GET_FIRST(trx_sys->rw_trx_list);
+		for (trx_t* t = UT_LIST_GET_FIRST(trx_sys.rw_trx_list);
 		     t != NULL;
 		     t = UT_LIST_GET_NEXT(trx_list, t)) {
 
@@ -1580,7 +1580,7 @@ lock_rec_other_trx_holds_expl(
 			}
 		}
 
-		mutex_exit(&trx_sys->mutex);
+		trx_sys_mutex_exit();
 	}
 
 	lock_mutex_exit();
@@ -5736,8 +5736,7 @@ lock_print_info_summary(
 	fprintf(file, "\n");
 
 	fprintf(file,
-		"History list length %lu\n",
-		(ulong) trx_sys->rseg_history_len);
+		"History list length " ULINTPF "\n", trx_sys.rseg_history_len);
 
 #ifdef PRINT_NUM_OF_LOCK_STRUCTS
 	fprintf(file,
@@ -5756,7 +5755,7 @@ struct	PrintNotStarted {
 	void	operator()(const trx_t* trx)
 	{
 		ut_ad(trx->in_mysql_trx_list);
-		ut_ad(mutex_own(&trx_sys->mutex));
+		ut_ad(trx_sys_mutex_own());
 
 		/* See state transitions and locking rules in trx0trx.h */
 
@@ -5821,7 +5820,7 @@ public:
 	{
 		/* We iterate over the RW trx list first. */
 
-		m_trx_list = &trx_sys->rw_trx_list;
+		m_trx_list = &trx_sys.rw_trx_list;
 	}
 
 	/** Get the current transaction whose ordinality is m_index.
@@ -5928,7 +5927,6 @@ lock_rec_fetch_page(
 	ut_ad(lock_get_type_low(lock) == LOCK_REC);
 
 	ulint			space_id = lock->un_member.rec_lock.space;
-	fil_space_t*		space;
 	bool			found;
 	const page_size_t&	page_size = fil_space_get_page_size(space_id,
 								    &found);
@@ -5940,28 +5938,26 @@ lock_rec_fetch_page(
 
 		lock_mutex_exit();
 
-		mutex_exit(&trx_sys->mutex);
+		trx_sys_mutex_exit();
 
 		DEBUG_SYNC_C("innodb_monitor_before_lock_page_read");
 
-		/* Check if the space is exists or not. only
-		when the space is valid, try to get the page. */
-		space = fil_space_acquire(space_id);
-		if (space) {
+		/* The tablespace and the page must exist as long as
+		record locks exist in it. */
+		if (fil_space_t* space = fil_space_acquire(space_id)) {
 			dberr_t err = DB_SUCCESS;
-			mtr_start(&mtr);
+			mtr.start();
 			buf_page_get_gen(
 				page_id_t(space_id, page_no), page_size,
-				RW_NO_LATCH, NULL,
-				BUF_GET_POSSIBLY_FREED,
+				RW_NO_LATCH, NULL, BUF_GET,
 				__FILE__, __LINE__, &mtr, &err);
-			mtr_commit(&mtr);
+			mtr.commit();
 			fil_space_release(space);
 		}
 
 		lock_mutex_enter();
 
-		mutex_enter(&trx_sys->mutex);
+		trx_sys_mutex_enter();
 
 		return(true);
 	}
@@ -6054,7 +6050,7 @@ lock_print_info_all_transactions(
 
 	fprintf(file, "LIST OF TRANSACTIONS FOR EACH SESSION:\n");
 
-	mutex_enter(&trx_sys->mutex);
+	trx_sys_mutex_enter();
 
 	/* First print info on non-active transactions */
 
@@ -6063,7 +6059,7 @@ lock_print_info_all_transactions(
 	available from INFORMATION_SCHEMA.INNODB_TRX. */
 
 	PrintNotStarted	print_not_started(file);
-	ut_list_map(trx_sys->mysql_trx_list, print_not_started);
+	ut_list_map(trx_sys.mysql_trx_list, print_not_started);
 
 	const trx_t*	trx;
 	TrxListIterator	trx_iter;
@@ -6097,7 +6093,7 @@ lock_print_info_all_transactions(
 			if (!lock_trx_print_locks(
 					file, trx, lock_iter, load_block)) {
 
-				/* Resync trx_iter, the trx_sys->mutex and
+				/* Resync trx_iter, the trx_sys.mutex and
 				the lock mutex were released. A page was
 				successfully read in.  We need to print its
 				contents on the next call to
@@ -6118,7 +6114,7 @@ lock_print_info_all_transactions(
 	}
 
 	lock_mutex_exit();
-	mutex_exit(&trx_sys->mutex);
+	trx_sys_mutex_exit();
 
 	ut_ad(lock_validate());
 }
@@ -6186,7 +6182,7 @@ lock_table_queue_validate(
 	     lock = UT_LIST_GET_NEXT(un_member.tab_lock.locks, lock)) {
 
 		/* lock->trx->state cannot change from or to NOT_STARTED
-		while we are holding the trx_sys->mutex. It may change
+		while we are holding the trx_sys.mutex. It may change
 		from ACTIVE to PREPARED, but it may not change to
 		COMMITTED, because we are holding the lock_sys->mutex. */
 		ut_ad(trx_assert_started(lock->trx));
@@ -6239,7 +6235,7 @@ lock_rec_queue_validate(
 
 	if (!locked_lock_trx_sys) {
 		lock_mutex_enter();
-		mutex_enter(&trx_sys->mutex);
+		trx_sys_mutex_enter();
 	}
 
 	if (!page_rec_is_user_rec(rec)) {
@@ -6271,7 +6267,7 @@ lock_rec_queue_validate(
 		/* Unlike the non-debug code, this invariant can only succeed
 		if the check and assertion are covered by the lock mutex. */
 
-		const trx_t *impl_trx = trx_sys->rw_trx_hash.find(
+		const trx_t *impl_trx = trx_sys.rw_trx_hash.find(
 			lock_clust_rec_some_has_impl(rec, index, offsets));
 
 		ut_ad(lock_mutex_own());
@@ -6371,7 +6367,7 @@ lock_rec_queue_validate(
 func_exit:
 	if (!locked_lock_trx_sys) {
 		lock_mutex_exit();
-		mutex_exit(&trx_sys->mutex);
+		trx_sys_mutex_exit();
 	}
 
 	return(TRUE);
@@ -6399,7 +6395,7 @@ lock_rec_validate_page(
 	ut_ad(!lock_mutex_own());
 
 	lock_mutex_enter();
-	mutex_enter(&trx_sys->mutex);
+	trx_sys_mutex_enter();
 loop:
 	lock = lock_rec_get_first_on_page_addr(
 		lock_sys->rec_hash,
@@ -6457,7 +6453,7 @@ loop:
 
 function_exit:
 	lock_mutex_exit();
-	mutex_exit(&trx_sys->mutex);
+	trx_sys_mutex_exit();
 
 	if (heap != NULL) {
 		mem_heap_free(heap);
@@ -6465,23 +6461,15 @@ function_exit:
 	return(TRUE);
 }
 
-/*********************************************************************//**
-Validates the table locks.
-@return TRUE if ok */
+/** Validate the table locks. */
 static
-ibool
-lock_validate_table_locks(
-/*======================*/
-	const trx_ut_list_t*	trx_list)	/*!< in: trx list */
+void
+lock_validate_table_locks()
 {
-	const trx_t*	trx;
-
 	ut_ad(lock_mutex_own());
 	ut_ad(trx_sys_mutex_own());
 
-	ut_ad(trx_list == &trx_sys->rw_trx_list);
-
-	for (trx = UT_LIST_GET_FIRST(*trx_list);
+	for (const trx_t* trx = UT_LIST_GET_FIRST(trx_sys.rw_trx_list);
 	     trx != NULL;
 	     trx = UT_LIST_GET_NEXT(trx_list, trx)) {
 
@@ -6500,8 +6488,6 @@ lock_validate_table_locks(
 			}
 		}
 	}
-
-	return(TRUE);
 }
 
 /*********************************************************************//**
@@ -6608,9 +6594,9 @@ lock_validate()
 	page_addr_set	pages;
 
 	lock_mutex_enter();
-	mutex_enter(&trx_sys->mutex);
+	trx_sys_mutex_enter();
 
-	ut_a(lock_validate_table_locks(&trx_sys->rw_trx_list));
+	lock_validate_table_locks();
 
 	/* Iterate over all the record locks and validate the locks. We
 	don't want to hog the lock_sys_t::mutex and the trx_sys_t::mutex.
@@ -6629,7 +6615,7 @@ lock_validate()
 		}
 	}
 
-	mutex_exit(&trx_sys->mutex);
+	trx_sys_mutex_exit();
 	lock_mutex_exit();
 
 	for (page_addr_set::const_iterator it = pages.begin();
@@ -6865,7 +6851,7 @@ lock_rec_convert_impl_to_expl(
 
 		trx_id = lock_clust_rec_some_has_impl(rec, index, offsets);
 
-		trx = trx_sys->rw_trx_hash.find(trx_id, true);
+		trx = trx_sys.rw_trx_hash.find(trx_id, true);
 	} else {
 		ut_ad(!dict_index_is_online_ddl(index));
 
@@ -7600,17 +7586,17 @@ lock_trx_release_locks(
 
 	if (trx_state_eq(trx, TRX_STATE_PREPARED)) {
 
-		mutex_enter(&trx_sys->mutex);
+		trx_sys_mutex_enter();
 
-		ut_a(trx_sys->n_prepared_trx > 0);
-		--trx_sys->n_prepared_trx;
+		ut_a(trx_sys.n_prepared_trx > 0);
+		--trx_sys.n_prepared_trx;
 
 		if (trx->is_recovered) {
-			ut_a(trx_sys->n_prepared_recovered_trx > 0);
-			trx_sys->n_prepared_recovered_trx--;
+			ut_a(trx_sys.n_prepared_recovered_trx > 0);
+			trx_sys.n_prepared_recovered_trx--;
 		}
 
-		mutex_exit(&trx_sys->mutex);
+		trx_sys_mutex_exit();
 	} else {
 		ut_ad(trx_state_eq(trx, TRX_STATE_ACTIVE));
 	}
@@ -7874,11 +7860,9 @@ lock_table_has_locks(
 
 #ifdef UNIV_DEBUG
 	if (!has_locks) {
-		mutex_enter(&trx_sys->mutex);
-
-		ut_ad(!lock_table_locks_lookup(table, &trx_sys->rw_trx_list));
-
-		mutex_exit(&trx_sys->mutex);
+		trx_sys_mutex_enter();
+		ut_ad(!lock_table_locks_lookup(table, &trx_sys.rw_trx_list));
+		trx_sys_mutex_exit();
 	}
 #endif /* UNIV_DEBUG */
 
@@ -8047,7 +8031,7 @@ DeadlockChecker::print(const trx_t* trx, ulint max_query_len)
 	ulint	n_trx_locks = UT_LIST_GET_LEN(trx->lock.trx_locks);
 	ulint	heap_size = mem_heap_get_size(trx->lock.lock_heap);
 
-	mutex_enter(&trx_sys->mutex);
+	trx_sys_mutex_enter();
 
 	trx_print_low(lock_latest_err_file, trx, max_query_len,
 		      n_rec_locks, n_trx_locks, heap_size);
@@ -8057,7 +8041,7 @@ DeadlockChecker::print(const trx_t* trx, ulint max_query_len)
 			      n_rec_locks, n_trx_locks, heap_size);
 	}
 
-	mutex_exit(&trx_sys->mutex);
+	trx_sys_mutex_exit();
 }
 
 /** Print lock data to the deadlock file and possibly to stderr.

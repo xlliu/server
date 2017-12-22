@@ -172,7 +172,7 @@ struct trx_i_s_cache_t {
 	ha_storage_t*	storage;	/*!< storage for external volatile
 					data that may become unavailable
 					when we release
-					lock_sys->mutex or trx_sys->mutex */
+					lock_sys->mutex or trx_sys.mutex */
 	ulint		mem_allocd;	/*!< the amount of memory
 					allocated with mem_alloc*() */
 	ibool		is_truncated;	/*!< this is TRUE if the memory
@@ -1258,9 +1258,9 @@ fetch_data_into_cache_low(
 	trx_ut_list_t*		trx_list)	/*!< in: trx list */
 {
 	const trx_t*		trx;
-	bool			rw_trx_list = trx_list == &trx_sys->rw_trx_list;
+	bool			rw_trx_list = trx_list == &trx_sys.rw_trx_list;
 
-	ut_ad(rw_trx_list || trx_list == &trx_sys->mysql_trx_list);
+	ut_ad(rw_trx_list || trx_list == &trx_sys.mysql_trx_list);
 
 	/* Iterate over the transaction list and add each one
 	to innodb_trx's cache. We also add all locks that are relevant
@@ -1333,10 +1333,10 @@ fetch_data_into_cache(
 
 	/* Capture the state of the read-write transactions. This includes
 	internal transactions too. They are not on mysql_trx_list */
-	fetch_data_into_cache_low(cache, true, &trx_sys->rw_trx_list);
+	fetch_data_into_cache_low(cache, true, &trx_sys.rw_trx_list);
 
 	/* Capture the state of the read-only active transactions */
-	fetch_data_into_cache_low(cache, false, &trx_sys->mysql_trx_list);
+	fetch_data_into_cache_low(cache, false, &trx_sys.mysql_trx_list);
 
 	cache->is_truncated = FALSE;
 }
