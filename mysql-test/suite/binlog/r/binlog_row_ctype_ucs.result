@@ -18,6 +18,8 @@ DELIMITER /*!*/;
 ROLLBACK/*!*/;
 BEGIN
 /*!*/;
+# Annotate_rows:
+#Q> insert into t2 values (@v)
 SET TIMESTAMP=10000/*!*/;
 SET @@session.pseudo_thread_id=999999999/*!*/;
 SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1, @@session.check_constraint_checks=1/*!*/;
@@ -110,6 +112,7 @@ BEGIN
 #Q> INSERT INTO t1 VALUES ('ä(i1)')
 #YYMMDD HH:MM:SS server id #  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #YYMMDD HH:MM:SS server id #  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
 ### SET
@@ -130,6 +133,7 @@ BEGIN
 #Q> INSERT INTO t1 VALUES ('ä(i2)')
 #YYMMDD HH:MM:SS server id #  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #YYMMDD HH:MM:SS server id #  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
 ### SET
@@ -150,6 +154,7 @@ BEGIN
 #Q> INSERT INTO t1 VALUES ('ä(i3)')
 #YYMMDD HH:MM:SS server id #  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #YYMMDD HH:MM:SS server id #  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
 ### SET
@@ -170,6 +175,7 @@ BEGIN
 #Q> INSERT INTO t1 VALUES ('ä(p1)')
 #YYMMDD HH:MM:SS server id #  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #YYMMDD HH:MM:SS server id #  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
 ### SET
@@ -190,6 +196,7 @@ BEGIN
 #Q> INSERT INTO t1 VALUES ('ä(p2)')
 #YYMMDD HH:MM:SS server id #  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #YYMMDD HH:MM:SS server id #  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
 ### SET
@@ -210,6 +217,7 @@ BEGIN
 #Q> INSERT INTO t1 VALUES ('ä(p3)')
 #YYMMDD HH:MM:SS server id #  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #YYMMDD HH:MM:SS server id #  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
 ### SET

@@ -70,6 +70,7 @@ BEGIN
 #Q> INSERT INTO t1 VALUES (1,1),(2,2)
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Table_map: `new_test1`.`t1` mapped to number #
 # at #
+# Number of rows: 2
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `new_test1`.`t1`
 ### SET
@@ -104,6 +105,7 @@ BEGIN
 #Q> INSERT INTO t2 VALUES (1),(2)
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Table_map: `test2`.`t2` mapped to number #
 # at #
+# Number of rows: 2
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test2`.`t2`
 ### SET
@@ -127,6 +129,7 @@ BEGIN
 #Q> DELETE FROM test1.t1 WHERE a=1
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Table_map: `new_test1`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `new_test1`.`t1`
 ### WHERE
@@ -157,6 +160,7 @@ BEGIN
 #Q> INSERT INTO t3 VALUES (1),(2)
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Table_map: `new_test3`.`t3` mapped to number #
 # at #
+# Number of rows: 2
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `new_test3`.`t3`
 ### SET
@@ -180,6 +184,7 @@ BEGIN
 #Q> INSERT INTO test1.t1 VALUES (3,3)
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Table_map: `new_test1`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `new_test1`.`t1`
 ### SET
@@ -202,6 +207,7 @@ BEGIN
 #Q> FIELDS TERMINATED BY ',' LINES TERMINATED BY '\r\n
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Table_map: `new_test1`.`t1` mapped to number #
 # at #
+# Number of rows: 5
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `new_test1`.`t1`
 ### SET
@@ -239,6 +245,7 @@ BEGIN
 #Q> DELETE FROM test3.t3 WHERE a=1
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Table_map: `new_test3`.`t3` mapped to number #
 # at #
+# Number of rows: 1
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `new_test3`.`t3`
 ### WHERE
@@ -304,6 +311,7 @@ BEGIN
 #Q> INSERT INTO t1 VALUES (1,1),(2,2)
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Table_map: `new_test1`.`t1` mapped to number #
 # at #
+# Number of rows: 2
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `new_test1`.`t1`
 ### SET
@@ -338,6 +346,7 @@ BEGIN
 #Q> INSERT INTO t2 VALUES (1),(2)
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Table_map: `test2`.`t2` mapped to number #
 # at #
+# Number of rows: 2
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test2`.`t2`
 ### SET
@@ -361,6 +370,7 @@ BEGIN
 #Q> DELETE FROM test1.t1 WHERE a=1
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Table_map: `new_test1`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `new_test1`.`t1`
 ### WHERE
@@ -391,6 +401,7 @@ BEGIN
 #Q> INSERT INTO t3 VALUES (1),(2)
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Table_map: `new_test3`.`t3` mapped to number #
 # at #
+# Number of rows: 2
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `new_test3`.`t3`
 ### SET
@@ -414,6 +425,7 @@ BEGIN
 #Q> INSERT INTO test1.t1 VALUES (3,3)
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Table_map: `new_test1`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `new_test1`.`t1`
 ### SET
@@ -436,6 +448,7 @@ BEGIN
 #Q> FIELDS TERMINATED BY ',' LINES TERMINATED BY '\r\n
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Table_map: `new_test1`.`t1` mapped to number #
 # at #
+# Number of rows: 5
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `new_test1`.`t1`
 ### SET
@@ -473,6 +486,7 @@ BEGIN
 #Q> DELETE FROM test3.t3 WHERE a=1
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Table_map: `new_test3`.`t3` mapped to number #
 # at #
+# Number of rows: 1
 #010909  4:46:40 server id #  end_log_pos # CRC32 XXX 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `new_test3`.`t3`
 ### WHERE

@@ -61,6 +61,7 @@ BEGIN
 #Q> INSERT INTO t1 VALUES (10, 1, 2, 3, 4, 5, 6, 7, "")
 #<date> server id 1  end_log_pos 899 CRC32 XXX 	Table_map: `test`.`t1` mapped to number num
 # at 899
+# Number of rows: 1
 #<date> server id 1  end_log_pos 967 CRC32 XXX 	Write_compressed_rows: table id 30 flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
 ### SET
@@ -89,6 +90,7 @@ BEGIN
 #Q> INSERT INTO t1 VALUES (11, 1, 2, 3, 4, 5, 6, 7, NULL)
 #<date> server id 1  end_log_pos 1214 CRC32 XXX 	Table_map: `test`.`t1` mapped to number num
 # at 1214
+# Number of rows: 1
 #<date> server id 1  end_log_pos 1281 CRC32 XXX 	Write_compressed_rows: table id 30 flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
 ### SET
@@ -117,6 +119,7 @@ BEGIN
 #Q> INSERT INTO t1 VALUES (12, 1, 2, 3, NULL, 5, 6, 7, "A")
 #<date> server id 1  end_log_pos 1530 CRC32 XXX 	Table_map: `test`.`t1` mapped to number num
 # at 1530
+# Number of rows: 1
 #<date> server id 1  end_log_pos 1596 CRC32 XXX 	Write_compressed_rows: table id 30 flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
 ### SET
@@ -145,6 +148,7 @@ BEGIN
 #Q> INSERT INTO t1 VALUES (13, 1, 2, 3, 0, 5, 6, 7, "A")
 #<date> server id 1  end_log_pos 1842 CRC32 XXX 	Table_map: `test`.`t1` mapped to number num
 # at 1842
+# Number of rows: 1
 #<date> server id 1  end_log_pos 1909 CRC32 XXX 	Write_compressed_rows: table id 30 flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
 ### SET
@@ -173,6 +177,7 @@ BEGIN
 #Q> INSERT INTO t2 SELECT * FROM t1
 #<date> server id 1  end_log_pos 2134 CRC32 XXX 	Table_map: `test`.`t2` mapped to number num
 # at 2134
+# Number of rows: 4
 #<date> server id 1  end_log_pos 2225 CRC32 XXX 	Write_compressed_rows: table id 31 flags: STMT_END_F
 ### INSERT INTO `test`.`t2`
 ### SET
@@ -234,6 +239,7 @@ BEGIN
 #Q> UPDATE t2 SET f4=5 WHERE f4>0 or f4 is NULL
 #<date> server id 1  end_log_pos 2462 CRC32 XXX 	Table_map: `test`.`t2` mapped to number num
 # at 2462
+# Number of rows: 3
 #<date> server id 1  end_log_pos 2561 CRC32 XXX 	Update_compressed_rows: table id 31 flags: STMT_END_F
 ### UPDATE `test`.`t2`
 ### WHERE
@@ -314,6 +320,7 @@ BEGIN
 #Q> DELETE FROM t1
 #<date> server id 1  end_log_pos 2769 CRC32 XXX 	Table_map: `test`.`t1` mapped to number num
 # at 2769
+# Number of rows: 4
 #<date> server id 1  end_log_pos 2861 CRC32 XXX 	Delete_compressed_rows: table id 30 flags: STMT_END_F
 ### DELETE FROM `test`.`t1`
 ### WHERE
@@ -375,6 +382,7 @@ BEGIN
 #Q> DELETE FROM t2
 #<date> server id 1  end_log_pos 3069 CRC32 XXX 	Table_map: `test`.`t2` mapped to number num
 # at 3069
+# Number of rows: 4
 #<date> server id 1  end_log_pos 3154 CRC32 XXX 	Delete_compressed_rows: table id 31 flags: STMT_END_F
 ### DELETE FROM `test`.`t2`
 ### WHERE

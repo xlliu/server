@@ -2461,6 +2461,7 @@ BEGIN
 #Q> '',   
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
 ### SET
@@ -2642,6 +2643,7 @@ BEGIN
 #Q> 'a,b,c
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
 ### SET
@@ -2908,6 +2910,7 @@ BEGIN
 #Q>   'longtext
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 2
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
 ### SET
@@ -3248,6 +3251,7 @@ BEGIN
 #Q> c67 =
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Update_rows: table id # flags: STMT_END_F
 ### UPDATE `test`.`t1`
 ### WHERE
@@ -3592,6 +3596,7 @@ BEGIN
 #Q> c71 = 'mediumblob
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Update_rows: table id # flags: STMT_END_F
 ### UPDATE `test`.`t1`
 ### WHERE
@@ -3934,6 +3939,7 @@ BEGIN
 #Q>   c70 IS NULL
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Update_rows: table id # flags: STMT_END_F
 ### UPDATE `test`.`t1`
 ### WHERE
@@ -4279,6 +4285,7 @@ BEGIN
 #Q>   c72 = 'me
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Update_rows: table id # flags: STMT_END_F
 ### UPDATE `test`.`t1`
 ### WHERE
@@ -4538,6 +4545,7 @@ BEGIN
 #Q> c75 = '
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `test`.`t1`
 ### WHERE
@@ -4714,6 +4722,7 @@ BEGIN
 #Q> c73 = '' A
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `test`.`t1`
 ### WHERE
@@ -4893,6 +4902,7 @@ BEGIN
 #Q>   c75 = 'longtext' 
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `test`.`t1`
 ### WHERE
@@ -5070,6 +5080,7 @@ BEGIN
 #Q> c74 IS NUL
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `test`.`t1`
 ### WHERE
@@ -5299,6 +5310,7 @@ BEGIN
 #Q> ('2008-08-09','VARCH
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 9
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
 ### SET
@@ -5359,6 +5371,7 @@ BEGIN
 #Q> UPDATE t1 SET c28 = ADDDATE(c28,10) WHERE crn < 8
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 7
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Update_rows: table id # flags: STMT_END_F
 ### UPDATE `test`.`t1`
 ### WHERE
@@ -5437,6 +5450,7 @@ BEGIN
 #Q> DELETE FROM t1 WHERE crn < 8
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 7
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `test`.`t1`
 ### WHERE
@@ -5720,6 +5734,7 @@ BEGIN
 #Q> ('2008-01-09','VARCHAR-0
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 9
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
 ### SET
@@ -5789,6 +5804,7 @@ BEGIN
 #Q> ('2008-02-09','VARCHAR-0
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t2` mapped to number #
 # at #
+# Number of rows: 9
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t2`
 ### SET
@@ -5858,6 +5874,7 @@ BEGIN
 #Q> ('2008-03-09','VARCHAR-0
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t3` mapped to number #
 # at #
+# Number of rows: 9
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t3`
 ### SET
@@ -5928,6 +5945,7 @@ BEGIN
 # at #
 # at #
 # at #
+# Number of rows: 18
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Update_rows: table id #
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Update_rows: table id #
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Update_rows: table id # flags: STMT_END_F
@@ -6114,6 +6132,7 @@ BEGIN
 # at #
 # at #
 # at #
+# Number of rows: 18
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Delete_rows: table id #
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Delete_rows: table id #
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Delete_rows: table id # flags: STMT_END_F
@@ -6322,6 +6341,7 @@ BEGIN
 #Q> SET c3 = 'Wo
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 3
 #010909  4:46:40 server id 1  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
 ### SET

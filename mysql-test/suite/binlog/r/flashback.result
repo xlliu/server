@@ -89,6 +89,7 @@ BEGIN
 #Q> INSERT INTO t1 VALUES(0,0,0,0,0,'','','')
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
 ### SET
@@ -114,6 +115,7 @@ BEGIN
 #Q> INSERT INTO t1 VALUES(1,2,3,4,5, "abc", "abcdefg", "abcedfghijklmnopqrstuvwxyz")
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
 ### SET
@@ -139,6 +141,7 @@ BEGIN
 #Q> INSERT INTO t1 VALUES(127, 32767, 8388607, 2147483647, 9223372036854775807, repeat('a', 10), repeat('a', 20), repeat('a', 255))
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 1
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test`.`t1`
 ### SET
@@ -164,6 +167,7 @@ BEGIN
 #Q> UPDATE t1 SET c01=100 WHERE c02=0 OR c03=3
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 2
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Update_rows: table id # flags: STMT_END_F
 ### UPDATE `test`.`t1`
 ### WHERE
@@ -217,6 +221,7 @@ BEGIN
 #Q> DELETE FROM t1
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
 # at #
+# Number of rows: 3
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `test`.`t1`
 ### WHERE
@@ -272,18 +277,23 @@ ROLLBACK/*!*/;
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Annotate_rows:
 #Q> INSERT INTO t1 VALUES(0,0,0,0,0,'','','')
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
+# Number of rows: 1
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Annotate_rows:
 #Q> INSERT INTO t1 VALUES(1,2,3,4,5, "abc", "abcdefg", "abcedfghijklmnopqrstuvwxyz")
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
+# Number of rows: 1
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Annotate_rows:
 #Q> INSERT INTO t1 VALUES(127, 32767, 8388607, 2147483647, 9223372036854775807, repeat('a', 10), repeat('a', 20), repeat('a', 255))
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
+# Number of rows: 1
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Annotate_rows:
 #Q> UPDATE t1 SET c01=100 WHERE c02=0 OR c03=3
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
+# Number of rows: 2
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Annotate_rows:
 #Q> DELETE FROM t1
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Table_map: `test`.`t1` mapped to number #
+# Number of rows: 3
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Rotate to master-bin.000002  pos: 4
 #010909  9:46:40 server id 1  end_log_pos # CRC32 XXX 	Xid = #
 BEGIN/*!*/;

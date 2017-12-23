@@ -832,32 +832,62 @@ typedef struct st_print_event_info
     that was printed.  We cache these so that we don't have to print
     them if they are unchanged.
   */
-  // TODO: have the last catalog here ??
   char db[FN_REFLEN+1]; // TODO: make this a LEX_STRING when thd->db is
-  bool flags2_inited;
-  uint32 flags2;
-  bool sql_mode_inited;
-  sql_mode_t sql_mode;		/* must be same as THD.variables.sql_mode */
-  ulong auto_increment_increment, auto_increment_offset;
-  bool charset_inited;
   char charset[6]; // 3 variables, each of them storable in 2 bytes
   char time_zone_str[MAX_TIME_ZONE_NAME_LENGTH];
+  char delimiter[16];
+  sql_mode_t sql_mode;		/* must be same as THD.variables.sql_mode */
+  my_thread_id thread_id;
+  ulonglong row_events;
+  ulong auto_increment_increment, auto_increment_offset;
   uint lc_time_names_number;
   uint charset_database_number;
-  my_thread_id thread_id;
-  bool thread_id_printed;
+  uint verbose;
+  uint32 flags2;
   uint32 server_id;
-  bool server_id_printed;
   uint32 domain_id;
+  uint8 common_header_len;
+  enum_base64_output_mode base64_output_mode;
+  my_off_t hexdump_from;
+
+  table_mapping m_table_map;
+  table_mapping m_table_map_ignored;
+  bool flags2_inited;
+  bool sql_mode_inited;
+  bool charset_inited;
+  bool thread_id_printed;
+  bool server_id_printed;
   bool domain_id_printed;
   bool allow_parallel;
   bool allow_parallel_printed;
-
+  bool found_row_event;
+  bool print_row_count;
+  /* Settings on how to print the events */
+  bool short_form;
+  /*
+    This is set whenever a Format_description_event is printed.
+    Later, when an event is printed in base64, this flag is tested: if
+    no Format_description_event has been seen, it is unsafe to print
+    the base64 event, so an error message is generated.
+  */
+  bool printed_fd_event;
   /*
     Track when @@skip_replication changes so we need to output a SET
     statement for it.
   */
-  int skip_replication;
+  bool skip_replication;
+
+  /*
+     These two caches are used by the row-based replication events to
+     collect the header information and the main body of the events
+     making up a statement.
+   */
+  IO_CACHE head_cache;
+  IO_CACHE body_cache;
+#ifdef WHEN_FLASHBACK_REVIEW_READY
+  /* Storing the SQL for reviewing */
+  IO_CACHE review_sql_cache;
+#endif
 
   st_print_event_info();
 
@@ -874,37 +904,6 @@ typedef struct st_print_event_info
       && my_b_inited(&review_sql_cache)
 #endif
     ; }
-
-
-  /* Settings on how to print the events */
-  bool short_form;
-  enum_base64_output_mode base64_output_mode;
-  /*
-    This is set whenever a Format_description_event is printed.
-    Later, when an event is printed in base64, this flag is tested: if
-    no Format_description_event has been seen, it is unsafe to print
-    the base64 event, so an error message is generated.
-  */
-  bool printed_fd_event;
-  my_off_t hexdump_from;
-  uint8 common_header_len;
-  char delimiter[16];
-
-  uint verbose;
-  table_mapping m_table_map;
-  table_mapping m_table_map_ignored;
-
-  /*
-     These two caches are used by the row-based replication events to
-     collect the header information and the main body of the events
-     making up a statement.
-   */
-  IO_CACHE head_cache;
-  IO_CACHE body_cache;
-#ifdef WHEN_FLASHBACK_REVIEW_READY
-  /* Storing the SQL for reviewing */
-  IO_CACHE review_sql_cache;
-#endif
 } PRINT_EVENT_INFO;
 #endif
 
@@ -4446,6 +4445,12 @@ public:
                                MY_BITMAP *cols_bitmap,
                                const uchar *ptr, const uchar *prefix,
                                const my_bool no_fill_output= 0); // if no_fill_output=1, then print result is unnecessary
+  size_t calc_row_event_length(table_def *td,
+                               PRINT_EVENT_INFO *print_event_info,
+                               MY_BITMAP *cols_bitmap,
+                               const uchar *value);
+  void count_row_events(PRINT_EVENT_INFO *print_event_info);
+
 #endif
 
 #ifdef MYSQL_SERVER

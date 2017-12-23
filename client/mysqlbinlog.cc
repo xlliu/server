@@ -86,7 +86,8 @@ static char *result_file_name= 0;
 static const char *output_prefix= "";
 
 #ifndef DBUG_OFF
-static const char* default_dbug_option = "d:t:o,/tmp/mysqlbinlog.trace";
+static const char *default_dbug_option = "d:t:o,/tmp/mysqlbinlog.trace";
+const char *current_dbug_option= default_dbug_option;
 #endif
 static const char *load_groups[]=
 { "mysqlbinlog", "client", "client-server", "client-mariadb", 0 };
@@ -106,6 +107,7 @@ static char *opt_base64_output_mode_str= NullS;
 static char* database= 0;
 static char* table= 0;
 static my_bool force_opt= 0, short_form= 0, remote_opt= 0;
+static my_bool print_row_count= 0;
 static my_bool debug_info_flag, debug_check_flag;
 static my_bool force_if_open_opt= 1;
 static my_bool opt_raw_mode= 0, opt_stop_never= 0;
@@ -792,7 +794,7 @@ print_use_stmt(PRINT_EVENT_INFO* pinfo, const Query_log_event *ev)
 static void
 print_skip_replication_statement(PRINT_EVENT_INFO *pinfo, const Log_event *ev)
 {
-  int cur_val;
+  bool cur_val;
 
   cur_val= (ev->flags & LOG_EVENT_SKIP_REPLICATION_F) != 0;
   if (cur_val == pinfo->skip_replication)
@@ -894,6 +896,8 @@ static bool print_row_event(PRINT_EVENT_INFO *print_event_info, Log_event *ev,
   Table_map_log_event *ignored_map= 
     print_event_info->m_table_map_ignored.get_table(table_id);
   bool skip_event= (ignored_map != NULL);
+  char ll_buff[21];
+  bool result= 0;
 
   if (opt_flashback)
   {
@@ -966,19 +970,18 @@ static bool print_row_event(PRINT_EVENT_INFO *print_event_info, Log_event *ev,
     return 0;
 
   if (!opt_flashback)
-    return print_base64(print_event_info, ev);
+    result= print_base64(print_event_info, ev);
   else
   {
     if (is_stmt_end)
     {
-      bool res= false;
       Log_event *e= NULL;
 
       // Print the row_event from the last one to the first one
       for (uint i= events_in_stmt.elements; i > 0; --i)
       {
         e= *(dynamic_element(&events_in_stmt, i - 1, Log_event**));
-        res= res || print_base64(print_event_info, e);
+        result= result || print_base64(print_event_info, e);
       }
       // Copy all output into the Log_event
       ev->output_buf.copy(e->output_buf);
@@ -989,12 +992,16 @@ static bool print_row_event(PRINT_EVENT_INFO *print_event_info, Log_event *ev,
         delete e;
       }
       reset_dynamic(&events_in_stmt);
-
-      return res;
     }
   }
-
-  return 0;
+  if (is_stmt_end)
+  {
+    if (print_event_info->print_row_count)
+      fprintf(result_file, "# Number of rows: %s\n",
+              llstr(print_event_info->row_events, ll_buff));
+    print_event_info->row_events= 0;
+  }
+  return result;
 }
 
 
@@ -1025,7 +1032,6 @@ Exit_status process_event(PRINT_EVENT_INFO *print_event_info, Log_event *ev,
   Log_event_type ev_type= ev->get_type_code();
   my_bool destroy_evt= TRUE;
   DBUG_ENTER("process_event");
-  print_event_info->short_form= short_form;
   Exit_status retval= OK_CONTINUE;
   IO_CACHE *const head= &print_event_info->head_cache;
 
@@ -1454,10 +1460,18 @@ Exit_status process_event(PRINT_EVENT_INFO *print_event_info, Log_event *ev,
     {
       Rows_log_event *e= (Rows_log_event*) ev;
       bool is_stmt_end= e->get_flags(Rows_log_event::STMT_END_F);
+      if (!print_event_info->found_row_event)
+      {
+        print_event_info->found_row_event= 1;
+        print_event_info->row_events= 0;
+      }
       if (print_row_event(print_event_info, ev, e->get_table_id(),
                           e->get_flags(Rows_log_event::STMT_END_F)))
         goto err;
-      if (!is_stmt_end)
+      DBUG_PRINT("info", ("is_stmt_end: %d", (int) is_stmt_end));
+      if (is_stmt_end)
+        print_event_info->found_row_event= 0;
+      else if (opt_flashback)
         destroy_evt= FALSE;
       break;
     }
@@ -1470,7 +1484,8 @@ Exit_status process_event(PRINT_EVENT_INFO *print_event_info, Log_event *ev,
       if (print_row_event(print_event_info, ev, e->get_table_id(),
                           e->get_flags(Old_rows_log_event::STMT_END_F)))
         goto err;
-      if (!is_stmt_end)
+      DBUG_PRINT("info", ("is_stmt_end: %d", (int) is_stmt_end));
+      if (!is_stmt_end && opt_flashback)
         destroy_evt= FALSE;
       break;
     }
@@ -1492,6 +1507,7 @@ err:
 end:
   rec_count++;
   
+  DBUG_PRINT("info", ("end event processing"));
   /*
     Destroy the log_event object. 
     MariaDB MWL#36: mainline does this:
@@ -1571,8 +1587,8 @@ static struct my_option my_options[] =
    &database, &database, 0, GET_STR_ALLOC, REQUIRED_ARG,
    0, 0, 0, 0, 0, 0},
 #ifndef DBUG_OFF
-  {"debug", '#', "Output debug log.", &default_dbug_option,
-   &default_dbug_option, 0, GET_STR, OPT_ARG, 0, 0, 0, 0, 0, 0},
+  {"debug", '#', "Output debug log.", &current_dbug_option,
+   &current_dbug_option, 0, GET_STR, OPT_ARG, 0, 0, 0, 0, 0, 0},
 #endif
   {"debug-check", OPT_DEBUG_CHECK, "Check memory and open file usage at exit .",
    &debug_check_flag, &debug_check_flag, 0,
@@ -1654,6 +1670,9 @@ static struct my_option my_options[] =
    &flashback_review_tablename, &flashback_review_tablename,
    0, GET_STR_ALLOC, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
 #endif
+  {"row-count", 0, "Print row counts for each row event",
+   &print_row_count, &print_row_count, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0,
+   0, 0},
   {"server-id", 0,
    "Extract only binlog entries created by the server having the given id.",
    &server_id, &server_id, 0, GET_ULONG,
@@ -1827,6 +1846,7 @@ static void warning(const char *format,...)
 */
 static void cleanup()
 {
+  DBUG_ENTER("cleanup");
   my_free(pass);
   my_free(database);
   my_free(table);
@@ -1840,12 +1860,13 @@ static void cleanup()
   delete glob_description_event;
   if (mysql)
     mysql_close(mysql);
+  DBUG_VOID_RETURN;
 }
 
 
 static void print_version()
 {
-  printf("%s Ver 3.3 for %s at %s\n", my_progname, SYSTEM_TYPE, MACHINE_TYPE);
+  printf("%s Ver 3.4 for %s at %s\n", my_progname, SYSTEM_TYPE, MACHINE_TYPE);
 }
 
 
@@ -1896,7 +1917,10 @@ get_one_option(int optid, const struct my_option *opt __attribute__((unused)),
   switch (optid) {
 #ifndef DBUG_OFF
   case '#':
-    DBUG_PUSH(argument ? argument : default_dbug_option);
+    if (!argument)
+      argument= (char*) default_dbug_option;
+    current_dbug_option= argument;
+    DBUG_PUSH(argument);
     break;
 #endif
 #include <sslopt-case.h>
@@ -2131,6 +2155,8 @@ static Exit_status dump_log_entries(const char* logname)
   strmov(print_event_info.delimiter, "/*!*/;");
   
   print_event_info.verbose= short_form ? 0 : verbose;
+  print_event_info.short_form= short_form;
+  print_event_info.print_row_count= print_row_count || verbose;
 
   rc= (remote_opt ? dump_remote_log_entries(&print_event_info, logname) :
        dump_local_log_entries(&print_event_info, logname));

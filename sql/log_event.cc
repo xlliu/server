@@ -3256,13 +3256,220 @@ end:
   delete td;
 }
 
+/**
+  Calc length of a packed value of the given SQL type
+
+  @param[in] ptr               Pointer to string
+  @param[in] type              Column type
+  @param[in] meta              Column meta information
+
+  @retval   - number of bytes scanned from ptr.
+              Except in case of NULL, in which case we return 1 to indicate ok
+*/
+
+static size_t calc_field_event_length(const uchar *ptr, uint type, uint meta)
+{
+  uint32 length= 0;
+
+  if (type == MYSQL_TYPE_STRING)
+  {
+    if (meta >= 256)
+    {
+      uint byte0= meta >> 8;
+      uint byte1= meta & 0xFF;
+
+      if ((byte0 & 0x30) != 0x30)
+      {
+        /* a long CHAR() field: see #37426 */
+        length= byte1 | (((byte0 & 0x30) ^ 0x30) << 4);
+        type= byte0 | 0x30;
+      }
+      else
+        length = meta & 0xFF;
+    }
+    else
+      length= meta;
+  }
+
+  switch (type) {
+  case MYSQL_TYPE_LONG:
+  case MYSQL_TYPE_TIMESTAMP:
+    return 4;
+  case MYSQL_TYPE_TINY:
+  case MYSQL_TYPE_YEAR:
+    return 1;
+  case MYSQL_TYPE_SHORT:
+    return 2;
+  case MYSQL_TYPE_INT24:
+  case MYSQL_TYPE_TIME:
+  case MYSQL_TYPE_NEWDATE:
+  case MYSQL_TYPE_DATE:
+      return 3;
+  case MYSQL_TYPE_LONGLONG:
+  case MYSQL_TYPE_DATETIME:
+    return 8;
+  case MYSQL_TYPE_NEWDECIMAL:
+  {
+    uint precision= meta >> 8;
+    uint decimals= meta & 0xFF;
+    uint bin_size= my_decimal_get_binary_size(precision, decimals);
+    return bin_size;
+  }
+  case MYSQL_TYPE_FLOAT:
+    return 4;
+  case MYSQL_TYPE_DOUBLE:
+    return 8;
+  case MYSQL_TYPE_BIT:
+  {
+    /* Meta-data: bit_len, bytes_in_rec, 2 bytes */
+    uint nbits= ((meta >> 8) * 8) + (meta & 0xFF);
+    length= (nbits + 7) / 8;
+    return length;
+  }
+  case MYSQL_TYPE_TIMESTAMP2:
+    return my_timestamp_binary_length(meta);
+  case MYSQL_TYPE_DATETIME2:
+    return my_datetime_binary_length(meta);
+  case MYSQL_TYPE_TIME2:
+    return my_time_binary_length(meta);
+  case MYSQL_TYPE_ENUM:
+    switch (meta & 0xFF) {
+    case 1:
+    case 2:
+      return (meta & 0xFF);
+    default:
+      /* Unknown ENUM packlen=%d", meta & 0xFF */
+      return 0;
+    }
+    break;
+  case MYSQL_TYPE_SET:
+    return meta & 0xFF;
+  case MYSQL_TYPE_BLOB:
+    return (meta <= 4 ? meta : 0);
+  case MYSQL_TYPE_VARCHAR:
+  case MYSQL_TYPE_VAR_STRING:
+  case MYSQL_TYPE_STRING:
+    length= meta;
+    return length < 256 ? length + 1 : length + 2;
+  case MYSQL_TYPE_DECIMAL:
+    break;
+  default:
+    break;
+  }
+  return 0;
+}
+
+
+size_t
+Rows_log_event::calc_row_event_length(table_def *td,
+                                      PRINT_EVENT_INFO *print_event_info,
+                                      MY_BITMAP *cols_bitmap,
+                                      const uchar *value)
+{
+  const uchar *value0= value;
+  const uchar *null_bits= value;
+  uint null_bit_index= 0;
+
+  /*
+    Skip metadata bytes which gives the information about nullabity of master
+    columns. Master writes one bit for each affected column.
+   */
+
+  value+= (bitmap_bits_set(cols_bitmap) + 7) / 8;
+
+  for (size_t i= 0; i < td->size(); i ++)
+  {
+    int is_null;
+    is_null= (null_bits[null_bit_index / 8] >> (null_bit_index % 8)) & 0x01;
+
+    if (bitmap_is_set(cols_bitmap, i) == 0)
+      continue;
+
+    if (!is_null)
+    {
+      size_t size;
+      size_t fsize= td->calc_field_size((uint)i, (uchar*) value);
+      if (value + fsize > m_rows_end)
+      {
+        /* Corrupted replication event was detected, skipping entry */
+        return 0;
+      }
+      if (!(size= calc_field_event_length(value, td->type(i),
+                                          td->field_metadata(i))))
+        return 0;
+      value+= size;
+    }
+    null_bit_index++;
+  }
+  return value - value0;
+}
+
 
 /**
-  Print a row event into IO cache in human readable form (in SQL format)
-  
+   Calculate how many rows there are in the event
+
   @param[in] file              IO cache
   @param[in] print_event_into  Print parameters
 */
+
+void Rows_log_event::count_row_events(PRINT_EVENT_INFO *print_event_info)
+{
+  Table_map_log_event *map;
+  table_def *td;
+  uint row_events;
+  Log_event_type general_type_code= get_general_type_code();
+
+  switch (general_type_code) {
+  case WRITE_ROWS_EVENT:
+  case DELETE_ROWS_EVENT:
+    row_events= 1;
+    break;
+  case UPDATE_ROWS_EVENT:
+    row_events= 2;
+    break;
+  default:
+    DBUG_ASSERT(0); /* Not possible */
+    return;
+  }
+
+  if (!(map= print_event_info->m_table_map.get_table(m_table_id)) ||
+      !(td= map->create_table_def()))
+  {
+    /* Row event for unknown table */
+    return;
+  }
+
+  for (const uchar *value= m_rows_buf; value < m_rows_end; )
+  {
+    size_t length;
+    print_event_info->row_events++;
+
+    /* Print the first image */
+    if (!(length= calc_row_event_length(td, print_event_info,
+                                        &m_cols, value)))
+      break;
+    value+= length;
+
+    /* Print the second image (for UPDATE only) */
+    if (row_events == 2)
+    {
+      if (!(length= calc_row_event_length(td, print_event_info,
+                                          &m_cols_ai, value)))
+        break;
+      value+= length;
+    }
+  }
+  delete td;
+}
+
+
+/**
+  Print a row event into IO cache in human readable form (in SQL format)
+
+  @param[in] file              IO cache
+  @param[in] print_event_into  Print parameters
+*/
+
 void Rows_log_event::print_verbose(IO_CACHE *file,
                                    PRINT_EVENT_INFO *print_event_info)
 {
@@ -3323,7 +3530,7 @@ void Rows_log_event::print_verbose(IO_CACHE *file,
     sql_command_short= "";
     DBUG_ASSERT(0); /* Not possible */
   }
-  
+
   if (!(map= print_event_info->m_table_map.get_table(m_table_id)) ||
       !(td= map->create_table_def()))
   {
@@ -3343,6 +3550,8 @@ void Rows_log_event::print_verbose(IO_CACHE *file,
   for (const uchar *value= m_rows_buf; value < m_rows_end; )
   {
     size_t length;
+    print_event_info->row_events++;
+
     my_b_printf(file, "### %s %`s.%`s\n",
                       sql_command,
                       map->get_db_name(), map->get_table_name());
@@ -3457,7 +3666,8 @@ void Log_event::print_base64(IO_CACHE* file,
     DBUG_ASSERT(0);
   }
 
-  if (print_event_info->base64_output_mode != BASE64_OUTPUT_DECODE_ROWS)
+  if (print_event_info->base64_output_mode != BASE64_OUTPUT_DECODE_ROWS &&
+      ! print_event_info->short_form)
   {
     if (my_b_tell(file) == 0)
       my_b_write_string(file, "\nBINLOG '\n");
@@ -3469,10 +3679,12 @@ void Log_event::print_base64(IO_CACHE* file,
   }
 
 #ifdef WHEN_FLASHBACK_REVIEW_READY
-  if (print_event_info->verbose || need_flashback_review)
+  if (print_event_info->verbose || print_event_info->print_row_count ||
+      need_flashback_review)
 #else
   // Flashback need the table_map to parse the event
-  if (print_event_info->verbose || is_flashback)
+  if (print_event_info->verbose || print_event_info->print_row_count ||
+      is_flashback)
 #endif
   {
     Rows_log_event *ev= NULL;
@@ -3561,6 +3773,8 @@ void Log_event::print_base64(IO_CACHE* file,
 #else
       if (print_event_info->verbose)
         ev->print_verbose(file, print_event_info);
+      else
+        ev->count_row_events(print_event_info);
 #endif
       delete ev;
     }
@@ -11271,18 +11485,19 @@ void Rows_log_event::print_helper(FILE *file,
 #ifdef WHEN_FLASHBACK_REVIEW_READY
   IO_CACHE *const sql= &print_event_info->review_sql_cache;
 #endif
+  bool const last_stmt_event= get_flags(STMT_END_F);
 
   if (!print_event_info->short_form)
   {
-    bool const last_stmt_event= get_flags(STMT_END_F);
     print_header(head, print_event_info, !last_stmt_event);
     my_b_printf(head, "\t%s: table id %lu%s\n",
                 name, m_table_id,
                 last_stmt_event ? " flags: STMT_END_F" : "");
-    print_base64(body, print_event_info, !last_stmt_event);
   }
+  if (!print_event_info->short_form || print_event_info->print_row_count)
+    print_base64(body, print_event_info, !last_stmt_event);
 
-  if (get_flags(STMT_END_F))
+  if (last_stmt_event)
   {
     LEX_STRING tmp_str;
 
@@ -11387,11 +11602,13 @@ void Annotate_rows_log_event::pack_info(Protocol* protocol)
 #ifdef MYSQL_CLIENT
 void Annotate_rows_log_event::print(FILE *file, PRINT_EVENT_INFO *pinfo)
 {
-  if (pinfo->short_form)
-    return;
-
-  print_header(&pinfo->head_cache, pinfo, TRUE);
-  my_b_printf(&pinfo->head_cache, "\tAnnotate_rows:\n");
+  if (!pinfo->short_form)
+  {
+    print_header(&pinfo->head_cache, pinfo, TRUE);
+    my_b_printf(&pinfo->head_cache, "\tAnnotate_rows:\n");
+  }
+  else
+    my_b_printf(&pinfo->head_cache, "# Annotate_rows:\n");
 
   char *pbeg;   // beginning of the next line
   char *pend;   // end of the next line
@@ -11716,7 +11933,7 @@ Table_map_log_event::Table_map_log_event(const char *buf, uint event_len,
 
     ptr_after_colcnt= ptr_after_colcnt + m_colcnt;
     bytes_read= (uint) (ptr_after_colcnt - (uchar *)buf);
-    DBUG_PRINT("info", ("Bytes read: %d.\n", bytes_read));
+    DBUG_PRINT("info", ("Bytes read: %d", bytes_read));
     if (bytes_read < event_len)
     {
       m_field_metadata_size= net_field_length(&ptr_after_colcnt);
@@ -12164,6 +12381,9 @@ void Table_map_log_event::print(FILE *file, PRINT_EVENT_INFO *print_event_info)
                 m_dbnam, m_tblnam, m_table_id,
                 ((m_flags & TM_BIT_HAS_TRIGGERS_F) ?
                  " (has triggers)" : ""));
+  }
+  if (!print_event_info->short_form || print_event_info->print_row_count)
+  {
     print_base64(&print_event_info->body_cache, print_event_info, TRUE);
     copy_event_cache_to_file_and_reinit(&print_event_info->head_cache, file);
   }
@@ -13944,15 +14164,8 @@ Ignorable_log_event::print(FILE *file,
   they will always be printed for the first event.
 */
 st_print_event_info::st_print_event_info()
-  :flags2_inited(0), sql_mode_inited(0), sql_mode(0),
-   auto_increment_increment(0),auto_increment_offset(0), charset_inited(0),
-   lc_time_names_number(~0),
-   charset_database_number(ILLEGAL_CHARSET_INFO_NUMBER),
-   thread_id(0), thread_id_printed(false), server_id(0),
-   server_id_printed(false), domain_id(0), domain_id_printed(false),
-   allow_parallel(true), allow_parallel_printed(false), skip_replication(0),
-   base64_output_mode(BASE64_OUTPUT_UNSPEC), printed_fd_event(FALSE)
 {
+  myf const flags = MYF(MY_WME | MY_NABP);
   /*
     Currently we only use static PRINT_EVENT_INFO objects, so zeroed at
     program's startup, but these explicit bzero() is for the day someone
@@ -13963,7 +14176,29 @@ st_print_event_info::st_print_event_info()
   bzero(time_zone_str, sizeof(time_zone_str));
   delimiter[0]= ';';
   delimiter[1]= 0;
-  myf const flags = MYF(MY_WME | MY_NABP);
+  flags2_inited= 0;
+  sql_mode_inited= 0;
+  row_events= 0;
+  sql_mode= 0;
+  auto_increment_increment= 0;
+  auto_increment_offset= 0;
+  charset_inited= 0;
+  lc_time_names_number= ~0;
+  charset_database_number= ILLEGAL_CHARSET_INFO_NUMBER;
+  thread_id= 0;
+  server_id= 0;
+  domain_id= 0;
+  thread_id_printed= false;
+  server_id_printed= false;
+  domain_id_printed= false;
+  allow_parallel= true;
+  allow_parallel_printed= false;
+  found_row_event= false;
+  print_row_count= false;
+  short_form= false;
+  skip_replication= 0;
+  printed_fd_event=FALSE;
+  base64_output_mode=BASE64_OUTPUT_UNSPEC;
   open_cached_file(&head_cache, NULL, NULL, 0, flags);
   open_cached_file(&body_cache, NULL, NULL, 0, flags);
 #ifdef WHEN_FLASHBACK_REVIEW_READY
