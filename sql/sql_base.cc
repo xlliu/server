@@ -7647,7 +7647,7 @@ insert_fields(THD *thd, Name_resolution_context *context, const char *db_name,
       if ((field= field_iterator.field()) &&
           (field->vers_sys_field() ?
             field->vers_sys_invisible(thd) :
-            field->invisible))
+            field->invisible != VISIBLE))
       {
         if (thd->lex->sql_command != SQLCOM_CREATE_TABLE ||
           !(thd->lex->create_info.options & HA_VERSIONED_TABLE))
